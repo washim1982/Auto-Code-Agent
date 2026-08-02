@@ -70,6 +70,21 @@ export class WorkspaceRegistry {
     return entry;
   }
 
+  /**
+   * Records index freshness after an indexing pass.
+   *
+   * Without this the launcher and `ws list` permanently report "index stale"
+   * even for a fully indexed repo — which is worse than showing nothing,
+   * because index freshness is the signal users are meant to act on.
+   */
+  setIndexState(id: string, chunks: number, stale = false): void {
+    const e = this.entries.find((x) => x.id === id);
+    if (!e) return;
+    e.indexedChunks = chunks;
+    e.indexStale = stale;
+    this.save();
+  }
+
   touch(id: string): void {
     const e = this.entries.find((x) => x.id === id);
     if (!e) return;

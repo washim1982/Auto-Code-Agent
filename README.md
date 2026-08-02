@@ -17,7 +17,8 @@ pnpm aca run "add a guard clause to divide" --local-only
 
 | | |
 |---|---|
-| **[Project_context.md](Project_context.md)** | How the system works — architecture, concepts, data model, interfaces. Read this first. |
+| **[guide.md](guide.md)** | How to use it — commands, workflows, troubleshooting. Start here. |
+| **[Project_context.md](Project_context.md)** | How the system works — architecture, concepts, data model, interfaces. |
 | **[Project_Progress.md](Project_Progress.md)** | What changed from the original design, bugs found running it, and what is left to do. |
 
 ## Design records

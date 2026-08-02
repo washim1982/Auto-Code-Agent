@@ -175,6 +175,10 @@ export async function indexWorkspace(
     }
   }
 
+  // Tell the registry, so the launcher and `ws list` stop claiming stale.
+  const stats = services.memory.indexStats();
+  services.registry.setIndexState(services.workspaceId, stats.chunks, false);
+
   return { files: files.length, chunks, skipped };
 }
 
