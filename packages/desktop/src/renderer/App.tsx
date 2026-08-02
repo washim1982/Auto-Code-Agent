@@ -1,33 +1,23 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RendererClient } from "./rpc.ts";
-import {
-  DagCanvas,
-  EventTimeline,
-  FileTree,
-  ModelTable,
-  type ModelRow,
-  type NodeRow,
-  type TreeEntry,
-} from "./views.tsx";
+import { Chat, type ContextLayer, type PlanProposal, type ThreadEntry } from "./views/Chat.tsx";
+import { DagCanvas, NodeDrawer, type DrawerTab } from "./views/RunGraph.tsx";
+import { DiffReview } from "./views/DiffReview.tsx";
+import { FileDetail, FileLegend, FileTree, type FileState } from "./views/Files.tsx";
+import { Models, type ProviderHealth } from "./views/Models.tsx";
+import { Settings, type AcaConfigShape, type PermissionMatrix } from "./views/Settings.tsx";
+import { Timeline } from "./views/Timeline.tsx";
+import { Launcher, type Workspace } from "./views/Launcher.tsx";
+import type {
+  AcaEvent,
+  DiffFile,
+  ModelRow,
+  NodeRow,
+  Scorecard,
+  TreeEntry,
+} from "./views/shared.ts";
 
-type View = "session" | "files" | "timeline" | "models" | "settings";
-
-interface Workspace {
-  id: string;
-  name: string;
-  root: string;
-  indexedChunks: number;
-  indexStale: boolean;
-}
-
-interface AcaEvent {
-  seq?: number;
-  runId: string;
-  nodeId: string | null;
-  ts: number;
-  type: string;
-  payload: Record<string, unknown>;
-}
+type View = "chat" | "graph" | "files" | "diff" | "timeline" | "models" | "settings";
 
 const client = new RendererClient();
 
@@ -40,22 +30,51 @@ export function App(): JSX.Element {
     root: string;
     branch: string | null;
   } | null>(null);
-  const [view, setView] = useState<View>("session");
+  const [switcher, setSwitcher] = useState(false);
+  const [view, setView] = useState<View>("chat");
 
+  // Session
+  const [threadId, setThreadId] = useState("default");
+  const [thread, setThread] = useState<ThreadEntry[]>([]);
+  const [streaming, setStreaming] = useState<{ text: string; thinking: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [plan, setPlan] = useState<PlanProposal | null>(null);
+  const [runId, setRunId] = useState<string | null>(null);
+
+  // Workspace data
   const [tree, setTree] = useState<TreeEntry[]>([]);
   const [models, setModels] = useState<ModelRow[]>([]);
+  const [scorecards, setScorecards] = useState<Scorecard[]>([]);
+  const [providers, setProviders] = useState<ProviderHealth[]>([]);
+  const [resident, setResident] = useState<{ provider: string; model: string }[]>([]);
+  const [slots, setSlots] = useState(1);
   const [nodes, setNodes] = useState<NodeRow[]>([]);
   const [events, setEvents] = useState<AcaEvent[]>([]);
+  const [diffs, setDiffs] = useState<DiffFile[]>([]);
+  const [indexStats, setIndexStats] = useState({ files: 0, chunks: 0, embedded: 0 });
+  const [config, setConfig] = useState<AcaConfigShape | null>(null);
+  const [permissions, setPermissions] = useState<PermissionMatrix>({});
+
+  // Selection
   const [scrub, setScrub] = useState(0);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const [drawerTab, setDrawerTab] = useState<DrawerTab>("context");
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [fileBody, setFileBody] = useState<string>("");
+  const [fileBody, setFileBody] = useState("");
+  const [activeModel, setActiveModel] = useState("");
   const [approval, setApproval] = useState<{
     id: string;
     summary: string;
     detail: string;
     irreversible: boolean;
   } | null>(null);
+  const [probing, setProbing] = useState<{ model: string; done: number; total: number } | null>(
+    null,
+  );
+
+  const rootRef = useRef<string | null>(null);
+
+  // ------------------------------------------------------------- connect
 
   useEffect(() => {
     void (async () => {
@@ -69,76 +88,304 @@ export function App(): JSX.Element {
     })();
 
     return client.onNotification((method, params) => {
+      const p = params as Record<string, never>;
+
       if (method === "event") {
-        const event = (params as { event: AcaEvent }).event;
-        // Live events append; the scrubber follows unless the user has moved it.
+        const event = (params as unknown as { event: AcaEvent }).event;
         setEvents((prev) => {
+          const atEnd = scrubAtEnd.current;
           const next = [...prev, event];
-          setScrub((s) => (s === (prev.at(-1)?.seq ?? 0) ? (event.seq ?? s) : s));
+          if (atEnd) setScrub(event.seq ?? 0);
           return next;
         });
+      } else if (method === "chat.delta") {
+        const kind = String(p["kind"]);
+        const delta = String(p["delta"]);
+        setStreaming((s) => ({
+          text: s ? s.text + (kind === "text" ? delta : "") : kind === "text" ? delta : "",
+          thinking: s
+            ? s.thinking + (kind === "thinking" ? delta : "")
+            : kind === "thinking"
+              ? delta
+              : "",
+        }));
+      } else if (method === "chat.turn") {
+        const role = String(p["role"]) as ThreadEntry["role"];
+        setStreaming(null);
+        setThread((t) => [
+          ...t,
+          {
+            id: `${Date.now()}-${t.length}`,
+            role,
+            content: String(p["content"] ?? ""),
+            ...(p["model"] ? { model: String(p["model"]) } : {}),
+            ...(p["thinking"] ? { thinking: String(p["thinking"]) } : {}),
+          },
+        ]);
+      } else if (method === "chat.tool") {
+        setThread((t) => [
+          ...t,
+          {
+            id: `${Date.now()}-tool-${t.length}`,
+            role: "tool",
+            toolName: String(p["name"]),
+            content: JSON.stringify(p["args"] ?? {}),
+          },
+        ]);
+      } else if (method === "chat.toolResult") {
+        setThread((t) => [
+          ...t,
+          {
+            id: `${Date.now()}-res-${t.length}`,
+            role: "tool",
+            toolName: String(p["name"]),
+            content: String(p["preview"] ?? "").slice(0, 120),
+            untrusted: true,
+          },
+        ]);
+      } else if (method === "run.proposed") {
+        const proposal = params as unknown as {
+          runId: string;
+          plan: { nodes: NodeRow[] };
+          spec: { acceptance: string[] };
+          problems: { severity: string; nodeId?: string; message: string }[];
+        };
+        setPlan({
+          runId: proposal.runId,
+          nodes: proposal.plan.nodes,
+          acceptance: proposal.spec.acceptance,
+          problems: proposal.problems ?? [],
+          model: activeModelRef.current,
+        });
+        setNodes(proposal.plan.nodes);
+        setRunId(proposal.runId);
+        setBusy(false);
+      } else if (method === "run.started") {
+        setPlan(null);
+        setView("graph");
+      } else if (method === "run.finished") {
+        setBusy(false);
+        void refreshRun(String(p["runId"]));
       } else if (method === "approval.requested") {
-        const a = (
-          params as {
-            approval: { id: string; summary: string; detail: string; irreversible: boolean };
-          }
-        ).approval;
-        setApproval(a);
+        setApproval((params as unknown as { approval: typeof approval }).approval);
       } else if (method === "approval.resolved") {
         setApproval(null);
+      } else if (method === "probe.progress") {
+        setProbing({
+          model: String(p["model"]),
+          done: Number(p["done"]),
+          total: Number(p["total"]),
+        });
+      } else if (method === "index.progress") {
+        setProbing(null);
       }
     });
   }, []);
 
-  const openWorkspace = useCallback(async (root: string) => {
+  // Keeps live events following the playhead unless the user scrubbed back.
+  const scrubAtEnd = useRef(true);
+  useEffect(() => {
+    scrubAtEnd.current = scrub >= (events.at(-1)?.seq ?? 0);
+  }, [scrub, events]);
+
+  const activeModelRef = useRef("");
+  useEffect(() => {
+    activeModelRef.current = activeModel;
+  }, [activeModel]);
+
+  // -------------------------------------------------------------- loading
+
+  const refreshRun = useCallback(async (id: string) => {
+    const root = rootRef.current;
+    if (!root) return;
     try {
-      const info = await client.call<{ name: string; root: string; branch: string | null }>(
-        "workspace.open",
-        { path: root },
-      );
-      setOpen(info);
-      setTree(await client.call<TreeEntry[]>("files.tree", { path: root }));
-      setModels(await client.call<ModelRow[]>("models.list", { path: root }));
-      await client.call("run.subscribe", { path: root });
-    } catch (err) {
-      setError((err as Error).message);
+      const [nodeRows, diffRows] = await Promise.all([
+        client.call<NodeRow[]>("run.nodes", { runId: id }),
+        client.call<DiffFile[]>("diff.forRun", { path: root, runId: id }),
+      ]);
+      if (nodeRows.length > 0) setNodes(nodeRows);
+      setDiffs(diffRows);
+    } catch {
+      // A finished run may already be gone from the session map; the event log
+      // still has everything, and the timeline reads from that.
     }
   }, []);
 
-  const pickFolder = useCallback(async () => {
-    const picked = await window.aca.pickWorkspace();
-    if (picked) await openWorkspace(picked);
-  }, [openWorkspace]);
-
-  const respondApproval = useCallback(
-    async (granted: boolean) => {
-      if (!approval) return;
-      await client.call("approval.respond", {
-        approvalId: approval.id,
-        granted,
-        scope: "once",
-      });
-      setApproval(null);
-    },
-    [approval],
-  );
-
-  const openFile = useCallback(
-    async (path: string) => {
-      if (!open) return;
-      setSelectedFile(path);
+  const openWorkspace = useCallback(
+    async (root: string) => {
       try {
-        const res = await client.call<{ content: string }>("files.read", {
-          path: open.root,
-          file: path,
-        });
-        setFileBody(res.content.slice(0, 20_000));
+        rootRef.current = root;
+        const info = await client.call<{
+          name: string;
+          root: string;
+          branch: string | null;
+          index: { files: number; chunks: number; embedded: number };
+        }>("workspace.open", { path: root });
+        setOpen(info);
+        setIndexStats(info.index);
+        setSwitcher(false);
+
+        const [treeRows, modelRows, cards, cfg, status, residency] = await Promise.all([
+          client.call<TreeEntry[]>("files.tree", { path: root }),
+          client.call<ModelRow[]>("models.list", { path: root }),
+          client.call<Scorecard[]>("models.scorecards", { path: root }),
+          client.call<{ config: AcaConfigShape; permissions: PermissionMatrix }>("config.get", {
+            path: root,
+          }),
+          client.call<{ providers?: unknown }>("workspace.status", { path: root }),
+          client.call<{ resident: { provider: string; model: string }[]; slots: number }>(
+            "models.residency",
+            { path: root },
+          ),
+        ]);
+
+        setTree(treeRows);
+        setModels(modelRows);
+        setScorecards(cards);
+        setConfig(cfg.config);
+        setPermissions(cfg.permissions);
+        setResident(residency.resident);
+        setSlots(residency.slots);
+        void status;
+
+        // Provider health, derived from what actually answered.
+        const byProvider = new Map<string, number>();
+        for (const m of modelRows)
+          byProvider.set(m.provider, (byProvider.get(m.provider) ?? 0) + 1);
+        setProviders(
+          [...byProvider].map(([id, count]) => ({
+            id,
+            up: true,
+            models: count,
+            detail: "reachable",
+          })),
+        );
+
+        if (!activeModel && modelRows.length > 0) {
+          const preferred =
+            modelRows.find((m) => m.state === "resident" && !/embed/i.test(m.id)) ??
+            modelRows.find((m) => !/embed/i.test(m.id));
+          if (preferred) setActiveModel(preferred.id);
+        }
+
+        const created = await client.call<{ threadId: string }>("chat.create", { path: root });
+        setThreadId(created.threadId);
+        await client.call("run.subscribe", { path: root });
       } catch (err) {
-        setFileBody(`cannot read: ${(err as Error).message}`);
+        setError((err as Error).message);
       }
     },
-    [open],
+    [activeModel],
   );
+
+  // -------------------------------------------------------------- actions
+
+  const send = useCallback(
+    async (text: string) => {
+      const root = rootRef.current;
+      if (!root) return;
+      setBusy(true);
+      setThread((t) => [...t, { id: `${Date.now()}-u`, role: "user", content: text }]);
+
+      try {
+        // Keyword intent, deliberately crude: classifying with a model costs a
+        // round-trip per message on local hardware, and the user can always
+        // force either path.
+        if (
+          /\b(add|implement|fix|refactor|rename|remove|delete|migrate|create|write|update|change|make)\b/i.test(
+            text,
+          )
+        ) {
+          await client.call("run.plan", { path: root, goal: text });
+        } else {
+          await client.call("chat.send", { path: root, threadId, text, model: activeModel });
+          setBusy(false);
+        }
+      } catch (err) {
+        setThread((t) => [
+          ...t,
+          {
+            id: `${Date.now()}-e`,
+            role: "assistant",
+            content: `error: ${(err as Error).message}`,
+          },
+        ]);
+        setBusy(false);
+      }
+    },
+    [threadId, activeModel],
+  );
+
+  const openFile = useCallback(async (path: string) => {
+    const root = rootRef.current;
+    if (!root) return;
+    setSelectedFile(path);
+    try {
+      const res = await client.call<{ content: string }>("files.read", {
+        path: root,
+        file: path,
+      });
+      setFileBody(res.content.slice(0, 40_000));
+    } catch (err) {
+      setFileBody(`cannot read: ${(err as Error).message}`);
+    }
+  }, []);
+
+  const fileState: FileState | null = useMemo(() => {
+    const entry = tree.find((t) => t.path === selectedFile);
+    if (!entry) return null;
+    const epochEvent = events
+      .filter((e) => e.type === "epoch.bumped" && e.payload["resource"] === entry.path)
+      .at(-1);
+    return {
+      path: entry.path,
+      git: entry.git,
+      lockedBy: entry.lockedBy,
+      inWriteSet: entry.inWriteSet,
+      indexed: entry.indexed,
+      sizeBytes: entry.sizeBytes,
+      epoch: epochEvent ? Number(epochEvent.payload["epoch"]) : null,
+    };
+  }, [tree, selectedFile, events]);
+
+  const focusedNode = nodes.find((n) => n.id === selectedNode) ?? null;
+  const usage = useMemo(() => {
+    let tokens = 0;
+    let cost = 0;
+    for (const e of events) {
+      if (e.type !== "model.response") continue;
+      tokens += Number(e.payload["inputTokens"] ?? 0) + Number(e.payload["outputTokens"] ?? 0);
+      cost += Number(e.payload["costUsd"] ?? 0);
+    }
+    return { tokens, cost };
+  }, [events]);
+
+  const contextLayers: ContextLayer[] = useMemo(() => {
+    const fenced = events.filter((e) => e.type === "guard.fenced").length;
+    return [
+      { rank: 1, label: "System + workspace map", tokens: 980, pinned: true, untrusted: false },
+      {
+        rank: 2,
+        label: `Conversation · ${thread.filter((t) => t.role !== "tool").length} turns`,
+        tokens: thread.reduce((s, t) => s + Math.ceil(t.content.length / 4), 0),
+        pinned: false,
+        untrusted: false,
+      },
+      ...(fenced > 0
+        ? [
+            {
+              rank: 7,
+              label: `Tool results · ${fenced} fenced`,
+              tokens: fenced * 400,
+              pinned: false,
+              untrusted: true,
+            },
+          ]
+        : []),
+    ];
+  }, [events, thread]);
+
+  // ---------------------------------------------------------------- render
 
   if (error && !connected) {
     return (
@@ -158,18 +405,21 @@ export function App(): JSX.Element {
     return (
       <Launcher
         workspaces={workspaces}
-        onOpen={openWorkspace}
-        onPick={pickFolder}
         connected={connected}
+        onOpen={openWorkspace}
+        onPick={async () => {
+          const picked = await window.aca.pickWorkspace();
+          if (picked) await openWorkspace(picked);
+        }}
       />
     );
   }
 
-  const focused = nodes.find((n) => n.id === selectedNode) ?? null;
+  const activeWindow = models.find((m) => m.id === activeModel)?.caps.contextWindow ?? 8192;
 
   return (
     <>
-      <div className="titlebar">
+      <div className="titlebar" style={{ position: "relative" }}>
         <span
           style={{
             width: 7,
@@ -178,171 +428,275 @@ export function App(): JSX.Element {
             background: connected ? "var(--moss)" : "var(--crimson)",
           }}
         />
-        <span>{open.name}</span>
-        <span className="dim">{open.root}</span>
-        {open.branch && <span className="dim">· {open.branch}</span>}
+        <span
+          className="interactive"
+          style={{ cursor: "pointer", display: "flex", gap: 8, alignItems: "center" }}
+          onClick={() => setSwitcher((s) => !s)}
+        >
+          <b>{open.name}</b>
+          <span className="dim">{open.root}</span>
+          {open.branch && <span className="dim">· {open.branch}</span>}
+          <span style={{ color: "var(--ember)", fontSize: 9 }}>▾</span>
+        </span>
+
         <div style={{ flex: 1 }} />
-        <button className="btn interactive" onClick={() => setOpen(null)}>
-          switch
-        </button>
+        {runId && (
+          <span className={`pill ${busy ? "p-run" : "p-mute"}`}>
+            {busy ? "▶ running" : "idle"} {runId}
+          </span>
+        )}
+
+        {switcher && (
+          <div className="dd interactive" style={{ left: 8, top: 34 }}>
+            <div className="dh">Workspace</div>
+            {workspaces.map((w) => (
+              <div
+                key={w.id}
+                className={`di${w.root === open.root ? " on" : ""}`}
+                onClick={() => void openWorkspace(w.root)}
+              >
+                <span>▸</span>
+                <span>{w.name}</span>
+                <span className="r2">
+                  {w.indexStale ? "stale" : `${w.indexedChunks} chunks`}
+                </span>
+              </div>
+            ))}
+            <div className="sep" />
+            <div
+              className="di"
+              onClick={async () => {
+                const picked = await window.aca.pickWorkspace();
+                if (picked) await openWorkspace(picked);
+              }}
+            >
+              <span style={{ color: "var(--ember)" }}>+</span>
+              <span>Open folder…</span>
+            </div>
+            <div
+              className="di"
+              onClick={() => {
+                setSwitcher(false);
+                void client.call("workspace.index", { path: open.root });
+              }}
+            >
+              <span>⟳</span>
+              <span>Re-index workspace</span>
+              <span className="r2">{indexStats.chunks} chunks</span>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="body">
         <nav className="rail">
-          <RailButton
+          <Rail
             label="Session"
-            active={view === "session"}
-            onClick={() => setView("session")}
+            active={view === "chat" || view === "graph"}
+            onClick={() => setView("chat")}
           >
             <path d="M21 11.5a8 8 0 0 1-8 8H8.2L3.5 22.5V17A8 8 0 1 1 21 11.5z" />
-          </RailButton>
-          <RailButton label="Files" active={view === "files"} onClick={() => setView("files")}>
+          </Rail>
+          <Rail label="Files" active={view === "files"} onClick={() => setView("files")}>
             <path d="M4 4v16M4 7h5M4 12h5M4 17h5M12 5h8M12 10h8M12 15h8M12 20h5" />
-          </RailButton>
-          <RailButton
+          </Rail>
+          <Rail label="Diff review" active={view === "diff"} onClick={() => setView("diff")}>
+            <path d="M4 5h7v14H4zM13 5h7v14h-7zM6.5 12h2M15.5 10h2M15.5 14h2" />
+          </Rail>
+          <Rail
             label="Timeline"
             active={view === "timeline"}
             onClick={() => setView("timeline")}
           >
             <path d="M3 12h18M7 8v8M12 5v14M17 9v6" />
-          </RailButton>
-          <RailButton
-            label="Models"
-            active={view === "models"}
-            onClick={() => setView("models")}
-          >
+          </Rail>
+          <Rail label="Models" active={view === "models"} onClick={() => setView("models")}>
             <rect x="4" y="4" width="16" height="16" rx="2" />
             <path d="M9 9h6v6H9z" />
-          </RailButton>
+          </Rail>
           <div className="spacer" />
-          <RailButton
+          <Rail
             label="Settings"
             active={view === "settings"}
             onClick={() => setView("settings")}
           >
             <circle cx="12" cy="12" r="3" />
             <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
-          </RailButton>
+          </Rail>
         </nav>
 
-        <div className="col left">
-          <div className="phead">
-            Files
-            <span className="r">
-              <span>{tree.filter((t) => t.lockedBy).length} locked</span>
-            </span>
+        {/* Files panel is persistent across session views, per the design. */}
+        {(view === "chat" || view === "graph" || view === "files") && (
+          <div className="col left">
+            <div className="phead">
+              Files
+              <span className="r">
+                <span>{tree.filter((t) => t.lockedBy).length} locked</span>
+              </span>
+            </div>
+            <div className="pbody">
+              <FileTree entries={tree} selected={selectedFile} onSelect={openFile} />
+              <FileLegend />
+            </div>
           </div>
-          <div className="pbody">
-            <FileTree entries={tree} selected={selectedFile} onSelect={openFile} />
-          </div>
-        </div>
+        )}
 
-        <div className="col center">
-          <div className="phead">
-            {view === "session" ? "Run graph" : view}
-            <span className="r">
-              <span>{nodes.length} nodes</span>
-              <span>{events.length} events</span>
-            </span>
-          </div>
-          <div className="pbody flush">
-            {view === "session" && (
-              <DagCanvas nodes={nodes} selected={selectedNode} onSelect={setSelectedNode} />
-            )}
-            {view === "files" && (
-              <pre
-                className="mono"
-                style={{
-                  margin: 0,
-                  padding: 12,
-                  fontSize: 11.5,
-                  userSelect: "text",
-                  overflow: "auto",
-                }}
-              >
-                {fileBody || "Select a file."}
-              </pre>
-            )}
-            {view === "timeline" && (
-              <EventTimeline events={events} position={scrub} onScrub={setScrub} />
-            )}
-            {view === "models" && (
-              <div style={{ padding: 12 }}>
-                <ModelTable models={models} />
+        {view === "chat" && (
+          <Chat
+            thread={thread}
+            streaming={streaming}
+            plan={plan}
+            models={models}
+            activeModel={activeModel}
+            contextLayers={contextLayers}
+            contextWindow={activeWindow}
+            busy={busy}
+            onSend={(t) => void send(t)}
+            onModelChange={setActiveModel}
+            onApprovePlan={(id) => {
+              setBusy(true);
+              void client.call("run.start", { runId: id });
+            }}
+            onRejectPlan={(id, reason) => {
+              setPlan(null);
+              void client.call("run.reject", { runId: id, reason });
+            }}
+          />
+        )}
+
+        {view === "graph" && (
+          <>
+            <div className="col center">
+              <div className="phead">
+                Session
+                <span className="r">
+                  <span className="segbtn">
+                    <button onClick={() => setView("chat")}>thread</button>
+                    <button className="on">graph</button>
+                  </span>
+                  <span>{nodes.length} nodes</span>
+                  {busy && runId && (
+                    <button
+                      className="btn danger"
+                      onClick={() => void client.call("run.cancel", { runId })}
+                    >
+                      cancel
+                    </button>
+                  )}
+                </span>
               </div>
-            )}
-            {view === "settings" && <Settings root={open.root} />}
-          </div>
-        </div>
-
-        <div className="col right">
-          <div className="phead">{focused ? `Node ${focused.id}` : "Detail"}</div>
-          <div className="pbody">
-            {approval && (
-              <div className="approval">
-                <div className="hd">⚠ approval required</div>
-                <div className="cmd">{approval.summary}</div>
-                {approval.irreversible && (
-                  <div style={{ color: "var(--crimson)", fontSize: 12, marginBottom: 8 }}>
-                    irreversible — rollback cannot undo this
-                  </div>
-                )}
-                <div className="dim" style={{ fontSize: 12, marginBottom: 10 }}>
-                  {approval.detail}
-                </div>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <button className="btn primary" onClick={() => void respondApproval(true)}>
-                    Approve
-                  </button>
-                  <button className="btn danger" onClick={() => void respondApproval(false)}>
-                    Reject
-                  </button>
-                </div>
+              <div className="pbody flush">
+                <DagCanvas nodes={nodes} selected={selectedNode} onSelect={setSelectedNode} />
               </div>
-            )}
+            </div>
+            <div className="col right">
+              <div className="phead">{focusedNode ? `Node ${focusedNode.id}` : "Detail"}</div>
+              {approval ? (
+                <ApprovalCard approval={approval} onRespond={(g) => void respond(g)} />
+              ) : (
+                <NodeDrawer
+                  node={focusedNode}
+                  events={events}
+                  tab={drawerTab}
+                  onTab={setDrawerTab}
+                />
+              )}
+            </div>
+          </>
+        )}
 
-            {focused ? (
-              <div style={{ fontSize: 12.5 }}>
-                <div
-                  className="dim mono"
+        {view === "files" && (
+          <>
+            <div className="col center">
+              <div className="phead">
+                {selectedFile ?? "—"}
+                <span className="r">
+                  {fileState?.lockedBy && <span className="pill p-block">locked</span>}
+                  {fileState?.inWriteSet && <span className="pill p-run">in write set</span>}
+                </span>
+              </div>
+              <div className="pbody flush">
+                <pre
+                  className="mono"
                   style={{
-                    fontSize: 10,
-                    letterSpacing: ".1em",
-                    textTransform: "uppercase",
-                    marginBottom: 6,
+                    margin: 0,
+                    padding: 12,
+                    fontSize: 11.5,
+                    userSelect: "text",
+                    overflow: "auto",
                   }}
                 >
-                  contract
-                </div>
-                <div style={{ marginBottom: 12 }}>{focused.contract || "(none stated)"}</div>
-                <div className="ladder">
-                  <div className="lr">
-                    <span className="l">status</span>
-                    <span className="tk">{focused.status}</span>
-                  </div>
-                  <div className="lr">
-                    <span className="l">attempts</span>
-                    <span className="tk">{focused.attempts}</span>
-                  </div>
-                  <div className="lr">
-                    <span className="l">model</span>
-                    <span className="tk">{focused.route?.model ?? "—"}</span>
-                  </div>
-                  <div className="lr">
-                    <span className="l">reads</span>
-                    <span className="tk">{focused.sets.read.join(", ") || "—"}</span>
-                  </div>
-                  <div className="lr">
-                    <span className="l">writes</span>
-                    <span className="tk">{focused.sets.write.join(", ") || "—"}</span>
-                  </div>
-                </div>
+                  {fileBody || "Select a file."}
+                </pre>
               </div>
-            ) : (
-              !approval && <div className="empty">Select a node.</div>
-            )}
-          </div>
-        </div>
+            </div>
+            <div className="col right">
+              <div className="phead">File state</div>
+              <div className="pbody">
+                <FileDetail
+                  state={fileState}
+                  indexStats={indexStats}
+                  onAttach={(p) => void send(`Look at ${p} and explain what it does.`)}
+                  onRollback={(p) =>
+                    void client.call("files.read", { path: open.root, file: p })
+                  }
+                />
+              </div>
+            </div>
+          </>
+        )}
+
+        {view === "diff" && (
+          <DiffReview
+            files={diffs}
+            reviewRoundsLeft={config?.run.maxReviewRounds ?? 3}
+            onReject={(file, hunk, note) => {
+              void send(
+                `The change to ${file} (hunk ${hunk + 1}) is wrong: ${note}. Please fix it.`,
+              );
+              setView("chat");
+            }}
+          />
+        )}
+
+        {view === "timeline" && (
+          <Timeline events={events} position={scrub} onScrub={setScrub} />
+        )}
+
+        {view === "models" && (
+          <Models
+            models={models}
+            scorecards={scorecards}
+            providers={providers}
+            resident={resident}
+            slots={slots}
+            probing={probing}
+            onProbe={(model) => {
+              setProbing({ model: model ?? "all", done: 0, total: models.length });
+              void client
+                .call("models.probe", { path: open.root, ...(model ? { model } : {}) })
+                .then(async () => {
+                  setProbing(null);
+                  setScorecards(
+                    await client.call<Scorecard[]>("models.scorecards", { path: open.root }),
+                  );
+                })
+                .catch(() => setProbing(null));
+            }}
+          />
+        )}
+
+        {view === "settings" && config && (
+          <Settings
+            config={config}
+            permissions={permissions}
+            root={open.root}
+            onSave={(next) => {
+              setConfig(next);
+              void client.call("config.set", { path: open.root, config: next });
+            }}
+          />
+        )}
       </div>
 
       <div className="strip">
@@ -358,20 +712,61 @@ export function App(): JSX.Element {
           <b>daemon</b> {connected ? "connected" : "offline"}
         </span>
         <span className="seg">
-          <b>models</b> <span className="num">{models.length}</span>
+          <b>model</b> {activeModel || "—"}
         </span>
         <span className="seg">
-          <b>events</b> <span className="num">{events.length}</span>
+          <b>tokens</b> <span className="num">{usage.tokens.toLocaleString()}</span>
+        </span>
+        <span className="seg">
+          <b>cost</b> <span className="num">${usage.cost.toFixed(4)}</span>{" "}
+          {config?.router.privacy === "local-only" && <span className="dim">local-only</span>}
         </span>
         <span className="seg last">
-          <b>workspace</b> {open.name}
+          <b>events</b> <span className="num">{events.length}</span>
         </span>
       </div>
     </>
   );
+
+  async function respond(granted: boolean): Promise<void> {
+    if (!approval) return;
+    await client.call("approval.respond", { approvalId: approval.id, granted, scope: "once" });
+    setApproval(null);
+  }
 }
 
-function RailButton({
+function ApprovalCard({
+  approval,
+  onRespond,
+}: {
+  approval: { summary: string; detail: string; irreversible: boolean };
+  onRespond: (granted: boolean) => void;
+}): JSX.Element {
+  return (
+    <div className="approval">
+      <div className="hd">⚠ approval required</div>
+      <div className="cmd">{approval.summary}</div>
+      {approval.irreversible && (
+        <div style={{ color: "var(--crimson)", fontSize: 12, marginBottom: 8 }}>
+          irreversible — rollback cannot undo this
+        </div>
+      )}
+      <div className="dim" style={{ fontSize: 12, marginBottom: 10 }}>
+        {approval.detail}
+      </div>
+      <div style={{ display: "flex", gap: 6 }}>
+        <button className="btn primary" onClick={() => onRespond(true)}>
+          Approve
+        </button>
+        <button className="btn danger" onClick={() => onRespond(false)}>
+          Reject
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Rail({
   label,
   active,
   onClick,
@@ -386,135 +781,5 @@ function RailButton({
     <button className={active ? "on" : ""} title={label} onClick={onClick}>
       <svg viewBox="0 0 24 24">{children}</svg>
     </button>
-  );
-}
-
-/**
- * The no-workspace-open state.
- *
- * Index freshness is shown per workspace because it is the most common reason
- * an agent gives a bad answer about an unfamiliar repo, and it is otherwise
- * completely invisible.
- */
-function Launcher({
-  workspaces,
-  onOpen,
-  onPick,
-  connected,
-}: {
-  workspaces: Workspace[];
-  onOpen: (root: string) => void;
-  onPick: () => void;
-  connected: boolean;
-}): JSX.Element {
-  return (
-    <>
-      <div className="titlebar">
-        <span
-          style={{
-            width: 7,
-            height: 7,
-            borderRadius: "50%",
-            background: connected ? "var(--moss)" : "var(--ink-3)",
-          }}
-        />
-        <span className="dim">no workspace</span>
-      </div>
-      <div className="body">
-        <div className="launch">
-          <div className="lcard">
-            <div
-              className="mono"
-              style={{
-                fontSize: 10,
-                letterSpacing: ".14em",
-                textTransform: "uppercase",
-                color: "var(--ember)",
-                marginBottom: 10,
-              }}
-            >
-              Auto-Code-Agent
-            </div>
-            <h3 style={{ fontSize: 22, margin: "0 0 6px" }}>Open a workspace</h3>
-            <p className="dim" style={{ marginBottom: 22 }}>
-              Everything is scoped to it — permissions, memory, and run history.
-            </p>
-
-            {workspaces.length > 0 && (
-              <div
-                className="mono dim"
-                style={{
-                  fontSize: 9.5,
-                  letterSpacing: ".1em",
-                  textTransform: "uppercase",
-                  marginBottom: 9,
-                }}
-              >
-                Recent
-              </div>
-            )}
-            {workspaces.map((w) => (
-              <div key={w.id} className="wsitem" onClick={() => onOpen(w.root)}>
-                <span style={{ color: "var(--ember)" }}>▸</span>
-                <div>
-                  <div className="wn">{w.name}</div>
-                  <div className="wp">{w.root}</div>
-                </div>
-                <div className="wr">
-                  {w.indexStale ? (
-                    <span style={{ color: "var(--wheat)" }}>index stale</span>
-                  ) : (
-                    <span style={{ color: "var(--moss)" }}>{w.indexedChunks} chunks</span>
-                  )}
-                </div>
-              </div>
-            ))}
-
-            <div style={{ display: "flex", gap: 7, marginTop: 18 }}>
-              <button className="btn primary" onClick={onPick}>
-                Open folder…
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
-
-function Settings({ root }: { root: string }): JSX.Element {
-  return (
-    <div style={{ padding: 16, fontSize: 12.5, maxWidth: 620 }}>
-      <div
-        className="mono dim"
-        style={{
-          fontSize: 10,
-          letterSpacing: ".1em",
-          textTransform: "uppercase",
-          marginBottom: 10,
-        }}
-      >
-        Workspace
-      </div>
-      <div className="ladder">
-        <div className="lr">
-          <span className="l">root</span>
-          <span className="tk">{root}</span>
-        </div>
-        <div className="lr">
-          <span className="l">config</span>
-          <span className="tk">.aca/config.json</span>
-        </div>
-        <div className="lr">
-          <span className="l">state</span>
-          <span className="tk">.aca/state.db</span>
-        </div>
-      </div>
-      <p className="dim" style={{ marginTop: 16, lineHeight: 1.6 }}>
-        Settings are edited in <span className="mono">.aca/config.json</span>. A workspace value
-        overrides your personal default, so a repo can pin{" "}
-        <span className="mono">local-only</span> and have it hold.
-      </p>
-    </div>
   );
 }
