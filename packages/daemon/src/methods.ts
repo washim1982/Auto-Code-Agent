@@ -5,6 +5,7 @@ import type { AcaEvent } from "@aca/protocol";
 import { indexWorkspace, openWorkspace, treeFor, type WorkspaceServices } from "@aca/cli";
 import type { Daemon } from "./server.ts";
 import { notify } from "./rpc.ts";
+import { applyScorecards, registerSessionMethods } from "./methods-session.ts";
 
 /**
  * Keeps one set of services per workspace, shared across clients.
@@ -22,6 +23,9 @@ class WorkspacePool {
     const existing = this.open.get(key);
     if (existing) return existing;
     const services = await openWorkspace(key);
+    // Fold any persisted measurements over the advertised capabilities before
+    // the router is used for anything.
+    applyScorecards(services);
     this.open.set(key, services);
     return services;
   }
@@ -44,6 +48,7 @@ export interface MethodContext {
 export function registerMethods(daemon: Daemon): { pool: WorkspacePool } {
   const pool = new WorkspacePool();
   const registry = new WorkspaceRegistry();
+  registerSessionMethods({ daemon, get: (path) => pool.get(path) });
 
   daemon.method("daemon.status", async () => ({
     pid: process.pid,

@@ -20,6 +20,14 @@ interface Breaker {
   openUntil: number;
 }
 
+/** The subset of a probe scorecard the router actually filters on. */
+export interface MeasuredCapabilities {
+  realContext: number;
+  tools: "native" | "shim" | "none";
+  structured: "grammar" | "json_schema" | "json_mode" | "none";
+  reliability: number;
+}
+
 /**
  * Capability-based router (flow review F9).
  *
@@ -65,11 +73,42 @@ export class ModelRouter {
         }
       }),
     );
-    this.cache = { at: Date.now(), models: all };
-    return all;
+    const measured = all.map((m) => this.measured(m));
+    this.cache = { at: Date.now(), models: measured };
+    return measured;
   }
 
   private pinned: string | null = null;
+  private scorecards = new Map<string, MeasuredCapabilities>();
+
+  /**
+   * Overrides advertised capabilities with measured ones.
+   *
+   * Called with the persisted scorecards at startup. Until it is, the router
+   * is filtering on numbers the provider claimed rather than numbers anyone
+   * checked — which is how a 0.8B model with a 262k advertised window ends up
+   * shortlisted for a job needing 48k of real recall.
+   */
+  applyScorecards(cards: Iterable<[string, MeasuredCapabilities]>): void {
+    this.scorecards = new Map(cards);
+    this.cache = null; // force a re-read so overrides take effect immediately
+  }
+
+  /** Advertised capabilities with any measurement folded over the top. */
+  private measured(d: ModelDescriptor): ModelDescriptor {
+    const card = this.scorecards.get(`${d.provider}/${d.id}`);
+    if (!card) return d;
+    return {
+      ...d,
+      caps: {
+        ...d.caps,
+        // A measured window is authoritative even when it is far smaller.
+        contextWindow: card.realContext || d.caps.contextWindow,
+        tools: card.tools,
+        structured: card.structured === "none" ? d.caps.structured : card.structured,
+      },
+    };
+  }
 
   /**
    * Restricts routing to a single model.
@@ -147,8 +186,13 @@ export class ModelRouter {
     const ranked: Candidate[] = eligible
       .map((d) => {
         const cost = (d.caps.costPer1kIn + d.caps.costPer1kOut) / maxCost;
+        const card = this.scorecards.get(`${d.provider}/${d.id}`);
         const terms = {
-          capability: capabilityScore(d),
+          // A measured reliability score is a far better capability signal than
+          // any inference from size; use it when we have one.
+          capability: card
+            ? 0.5 * capabilityScore(d) + 0.5 * card.reliability
+            : capabilityScore(d),
           nativeTools: d.caps.tools === "native" ? 1 : d.caps.tools === "shim" ? 0.4 : 0,
           cost: 1 - cost,
           // Choosing an already-loaded model over swapping in another can save

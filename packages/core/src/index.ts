@@ -91,3 +91,5 @@ export {
   type Ranked,
 } from "./memory/retrieval.ts";
 export { MemoryStore, type Embedder, type Lesson, type Retrieved } from "./memory/store.ts";
+export { ScorecardStore, type StoredScorecard } from "./memory/scorecards.ts";
+export { MemoryWriteback, type WritebackOptions } from "./memory/writeback.ts";

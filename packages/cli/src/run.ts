@@ -1,19 +1,13 @@
 import { createInterface } from "node:readline/promises";
 import {
-  Db,
-  EpochCache,
-  EventLog,
-  OutputGuard,
+  InputGuard,
+  MemoryWriteback,
   Planner,
   PlanValidationError,
-  InputGuard,
-  PersonaRegistry,
   RunSupervisor,
-  WorkspaceRegistry,
   type SupervisorHooks,
 } from "@aca/core";
-import { registerBuiltins, ToolRegistry, workspaceMap } from "@aca/tools";
-import { discoverProviders, ModelRouter, ResidencyManager } from "@aca/providers";
+import { workspaceMap } from "@aca/tools";
 import type { Plan, PlanNode } from "@aca/protocol";
 import { c } from "./theme.ts";
 import { renderDag } from "./render.ts";
@@ -22,6 +16,7 @@ import { makeGenerator } from "./generator.ts";
 import { makeExecutor } from "./executor.ts";
 import { Progress } from "./progress.ts";
 import { makeReviewer } from "./reviewer.ts";
+import { openWorkspace } from "./workspace-service.ts";
 
 export interface PlanRunOptions {
   root: string;
@@ -45,41 +40,29 @@ export interface PlanRunOptions {
  * through the taxonomy rather than a single retry edge.
  */
 export async function runPlan(options: PlanRunOptions): Promise<number> {
-  const registry = new WorkspaceRegistry();
-  const ws = registry.add(options.root);
+  // One bundle for the whole run, so the CLI, daemon and desktop cannot end up
+  // holding different database handles for the same repo.
+  const services = await openWorkspace(options.root, {
+    ...(options.localOnly ? { localOnly: true } : {}),
+    ...(options.model ? { pinnedModel: options.model } : {}),
+  });
+  const { db, events, cache, guard, tools, router, residency, personas, memory } = services;
+  const ws = { name: services.name, id: services.workspaceId };
 
-  const db = new Db(WorkspaceRegistry.dbPath(options.root));
-  const events = new EventLog(db);
-  const cache = new EpochCache(db, events);
-  const guard = new OutputGuard({ artifactDir: WorkspaceRegistry.artifactDir(options.root) });
-  const tools = new ToolRegistry();
-  registerBuiltins(tools);
-
-  const { providers, skipped } = await discoverProviders({ localOnly: options.localOnly });
-  if (providers.length === 0) {
+  const catalogue = await router.catalogue(true);
+  if (catalogue.length === 0) {
     process.stderr.write(
       c.crimson("no model provider reachable\n") +
-        skipped.map((s) => `  ${s.id}: ${s.reason}\n`).join(""),
+        services.skippedProviders.map((s) => `  ${s.id}: ${s.reason}\n`).join(""),
     );
+    services.close();
     return 1;
   }
 
-  const router = new ModelRouter(providers);
-  const residency = new ResidencyManager(providers);
-
-  if (options.model) {
-    const catalogue = await router.catalogue(true);
-    const match =
-      catalogue.find((m) => m.id === options.model) ??
-      catalogue.find((m) => m.id.toLowerCase().includes(options.model!.toLowerCase()));
-    if (!match) {
-      process.stderr.write(
-        c.crimson(`no model matching "${options.model}". Try: aca models\n`),
-      );
-      db.close();
-      return 1;
-    }
-    router.pin(match.id);
+  if (options.model && !router.pinnedModel) {
+    process.stderr.write(c.crimson(`no model matching "${options.model}". Try: aca models\n`));
+    services.close();
+    return 1;
   }
 
   // The first box in the flow: guard the input before anything sees it.
@@ -94,7 +77,7 @@ export async function runPlan(options: PlanRunOptions): Promise<number> {
       c.crimson(`${guarded.reason}
 `),
     );
-    db.close();
+    services.close();
     return 1;
   }
   const goal = guarded.text;
@@ -113,13 +96,13 @@ export async function runPlan(options: PlanRunOptions): Promise<number> {
     }
   }
 
-  const personas = new PersonaRegistry();
   const nodeModels = new Map<string, string>();
 
   // Give the planner the real tree; without it, it invents plausible paths and
   // every node's write set then fails enforcement at execution time.
   const map = workspaceMap(options.root, { maxFiles: 220, maxDepth: 4 });
   const planner = new Planner(makeGenerator(router), { workspaceMap: map });
+  void memory;
 
   const progress = new Progress(!options.json && process.stdout.isTTY === true);
 
@@ -152,7 +135,7 @@ export async function runPlan(options: PlanRunOptions): Promise<number> {
       process.stderr.write(c.crimson(`planning failed: ${(err as Error).message}\n`));
     }
     events.append(runId, "run.failed", { reason: (err as Error).message });
-    db.close();
+    services.close();
     return 1;
   }
 
@@ -180,7 +163,7 @@ export async function runPlan(options: PlanRunOptions): Promise<number> {
   }
 
   if (options.dryRun) {
-    db.close();
+    services.close();
     return 0;
   }
 
@@ -194,7 +177,7 @@ export async function runPlan(options: PlanRunOptions): Promise<number> {
       rl.close();
       events.append(runId, "plan.rejected", { reason });
       process.stdout.write(c.dim("plan rejected; nothing was executed\n"));
-      db.close();
+      services.close();
       return 0;
     }
     rl.close();
@@ -215,6 +198,7 @@ export async function runPlan(options: PlanRunOptions): Promise<number> {
         if (!execute) throw new Error("executor not initialised");
         return execute(node, token);
       },
+      writeback: new MemoryWriteback(memory),
       review: makeReviewer({
         root: options.root,
         runId,
@@ -265,6 +249,7 @@ export async function runPlan(options: PlanRunOptions): Promise<number> {
     localOnly: options.localOnly ?? false,
     meter: supervisor.meter,
     personas,
+    memory,
     onRoute: (nodeId, model) => nodeModels.set(nodeId, model),
     verbose: !options.json,
     requestApproval: async (summary, detail) => {
@@ -312,8 +297,8 @@ export async function runPlan(options: PlanRunOptions): Promise<number> {
     if (outcome.reason) process.stdout.write(`${c.dim(outcome.reason)}\n`);
   }
 
-  registry.touch(ws.id);
-  db.close();
+  services.registry.touch(ws.id);
+  services.close();
   return outcome.status === "completed" ? 0 : 1;
 }
 

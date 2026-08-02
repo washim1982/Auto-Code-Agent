@@ -8,6 +8,7 @@ import { runChat } from "./chat.ts";
 import { runPlan } from "./run.ts";
 import { startTui } from "./tui/run-tui.tsx";
 import { daemonCommand, memoryCommand, runsCommand } from "./commands/extra.ts";
+import { probeCommand } from "./commands/probe.ts";
 
 const HELP = `${c.bold("aca")} — autonomous coding agent
 
@@ -17,20 +18,12 @@ ${c.dim("USAGE")}
   aca plan "<goal>"            plan a change and show it; never executes
   aca run "<goal>"             plan, ask for approval, then execute
   aca models                   every provider and model, with capabilities
+  aca models probe [<model>]   measure real context, tools and reliability
   aca doctor                   provider health, residency, slots
   aca ws list|add <path>       workspaces
   aca memory index|query|lessons  build the T3 index, search it, list T4 lessons
   aca runs [show <id>]         run history, straight from the event log
   aca daemon status            daemon health
-  aca memory index|query|lessons  build the T3 index, search it, list T4 lessons
-  aca runs [show <id>]         run history, straight from the event log
-  aca daemon status            daemon health
-  aca memory index|query|lessons  build the T3 index, search it, list T4 lessons
-  aca runs [show <id>]         run history, straight from the event log
-  aca daemon status            daemon health
-  aca memory index|query|lessons   T3 index and T4 lessons
-  aca runs [show <id>]        run history from the event log
-  aca daemon status           daemon health
 
 ${c.dim("FLAGS")}
   --model <name>               pin a model for this session
@@ -116,6 +109,9 @@ async function main(argv: string[]): Promise<number> {
     }
 
     case "models": {
+      if (positional[1] === "probe") {
+        return await probeCommand({ root, localOnly, json, positional });
+      }
       const { providers, skipped } = await discoverProviders({ localOnly });
       const router = new ModelRouter(providers);
       const models = await router.catalogue(true);

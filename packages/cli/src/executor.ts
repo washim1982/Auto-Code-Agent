@@ -12,6 +12,8 @@ import {
   WriteSetViolation,
   PersonaRegistry,
   type BudgetMeter,
+  type MemoryStore,
+  type Retrieved,
   type GateRunner,
   type NodeExecution,
 } from "@aca/core";
@@ -41,6 +43,12 @@ export interface ExecutorOptions {
    */
   meter: BudgetMeter;
   personas: PersonaRegistry;
+  /**
+   * T3 index. Without it a node sees only its own contract and has to
+   * rediscover the codebase through tool calls every time — which is slow,
+   * burns the step budget, and is where small models get lost.
+   */
+  memory?: MemoryStore;
   /** Records the model each node ran on, so the reviewer can be forced to differ. */
   onRoute?: (nodeId: string, model: string) => void;
   verbose?: boolean;
@@ -106,6 +114,26 @@ export function makeExecutor(options: ExecutorOptions) {
       .filter((t) => resolvePermission(DEFAULT_MATRIX, node.persona, t.name) === "allow");
 
     const persona = options.personas.get(node.persona);
+
+    // Retrieve before assembling: what comes back decides how much of the
+    // window is left for anything else.
+    let retrieved: Retrieved[] = [];
+    if (options.memory) {
+      try {
+        retrieved = await options.memory.search(
+          [node.title, node.contract, ...node.sets.read].filter(Boolean).join(" "),
+          6,
+        );
+      } catch {
+        // Retrieval is an optimisation, never a precondition. A node with no
+        // context still runs; it just works harder.
+      }
+    }
+
+    const lessons = options.memory
+      ? options.memory.applicableLessons(`${node.title} ${node.contract}`)
+      : [];
+
     const brief = [
       `Node ${node.id}: ${node.title}`,
       `Contract: ${node.contract || "(none stated)"}`,
@@ -114,25 +142,52 @@ export function makeExecutor(options: ExecutorOptions) {
     ].join("\n");
 
     // F8: measured against the selected model's real window, not a constant.
+    // Ladder order is the priority order from docs/02: pinned identity first,
+    // then confirmed lessons, then retrieved code — evicted bottom-up.
     const assembled = assembler.assemble({
       contextWindow: decision.chosen.caps.contextWindow,
       layers: [
         { rank: 1, label: "system", content: NODE_SYSTEM, pinned: true, trust: "trusted" },
         { rank: 2, label: "contract", content: brief, pinned: true, trust: "trusted" },
+        ...(lessons.length
+          ? [
+              {
+                rank: 4,
+                label: "lessons",
+                content: [
+                  "Lessons from previous runs:",
+                  ...lessons.map((l) => `- ${l.lesson}`),
+                ].join("\n"),
+                pinned: false,
+                trust: "trusted" as const,
+              },
+            ]
+          : []),
+        ...retrieved.map((r, i) => ({
+          rank: 6 + i * 0.01,
+          label: `retrieved:${r.source}`,
+          content: `--- ${r.source}:${r.startLine}-${r.endLine} ---
+${r.content}`,
+          pinned: false,
+          trust: "trusted" as const,
+        })),
       ],
     });
     if (assembled.overflow) {
       throw new Error(`node ${node.id} cannot fit its contract in ${decision.chosen.id}`);
     }
 
-    const messages: ChatMessage[] = [
-      {
-        role: "system",
-        content: `${NODE_SYSTEM}
+    // Only layers that survived eviction reach the model — that is the point of
+    // assembling against a budget rather than concatenating and hoping.
+    const kept = assembled.layers.filter((l) => l.label.startsWith("retrieved:"));
+    const context = assembled.layers
+      .filter((l) => !l.pinned)
+      .map((l) => l.content)
+      .join("\n\n");
 
-${persona.system}`,
-      },
-      { role: "user", content: brief },
+    const messages: ChatMessage[] = [
+      { role: "system", content: `${NODE_SYSTEM}\n\n${persona.system}` },
+      { role: "user", content: context ? `${brief}\n\nContext:\n${context}` : brief },
     ];
 
     const writes = new Set<string>();
@@ -303,7 +358,13 @@ ${persona.system}`,
       signal: token.signal,
     });
 
-    return { gates, writes: [...writes] };
+    // Chunks that survived eviction are the ones that could have contributed;
+    // the supervisor promotes them if the node passes.
+    const retrievedChunkIds = retrieved
+      .filter((r) => kept.some((l) => l.label === `retrieved:${r.source}`))
+      .map((r) => r.id);
+
+    return { gates, writes: [...writes], retrievedChunkIds };
   };
 }
 

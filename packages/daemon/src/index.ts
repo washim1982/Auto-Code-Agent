@@ -12,3 +12,5 @@ export {
   type RpcNotification,
   type RpcResponse,
 } from "./rpc.ts";
+export { registerSessionMethods, applyScorecards } from "./methods-session.ts";
+export { SessionManager, type ActiveRun, type Broadcast } from "./sessions.ts";

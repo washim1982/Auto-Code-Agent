@@ -15,14 +15,22 @@ import { ReviewLoop } from "../review/loop.ts";
 import { BudgetMeter, type BudgetLimits } from "../budget/meter.ts";
 import { Cancelled, CancellationToken } from "./cancellation.ts";
 import { escalatingFailures } from "../gates/vector.ts";
+import type { MemoryWriteback } from "../memory/writeback.ts";
 
 export interface NodeExecution {
   gates: GateVector;
   /** Resources the node actually wrote, for epoch bumping. */
   writes: string[];
+  /** T3 chunks the node was given, so relevance can be scored on success. */
+  retrievedChunkIds?: string[];
 }
 
 export interface SupervisorHooks {
+  /**
+   * Memory write-back. Optional so the supervisor stays testable without a
+   * database, but a run without it learns nothing across nodes or across runs.
+   */
+  writeback?: MemoryWriteback;
   /** Runs one node. Throws to signal failure; the classifier decides what next. */
   executeNode(node: PlanNode, token: CancellationToken): Promise<NodeExecution>;
   /** Independent critic. Returns null to accept, or a critique to reject. */
@@ -245,6 +253,12 @@ export class RunSupervisor {
       }
 
       node.status = "done";
+      // T2: what this node concluded, for whatever depends on it.
+      this.hooks.writeback?.onNodeDone(runId, node, exec.writes);
+      // T3: chunks that contributed to work which passed its gates.
+      if (exec.retrievedChunkIds?.length) {
+        this.hooks.writeback?.onRetrievalUsed(exec.retrievedChunkIds);
+      }
       this.events.append(runId, "node.done", { writes: exec.writes }, node.id);
       this.locks.release(runId, node.id);
     } catch (err) {
