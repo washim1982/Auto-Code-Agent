@@ -1,0 +1,14 @@
+{
+  "name": "@aca/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": { "aca": "./src/bin.ts" },
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@aca/protocol": "workspace:*",
+    "@aca/core": "workspace:*",
+    "@aca/tools": "workspace:*",
+    "@aca/providers": "workspace:*"
+  }
+}

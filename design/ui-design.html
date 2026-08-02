@@ -1,0 +1,2013 @@
+<title>Auto-Code-Agent &#8212; Interface Design</title>
+<style>
+  :root {
+    --ground:#131519; --s1:#191C21; --s2:#1F2329; --s3:#262B32;
+    --line:#2A2F37; --line-2:#3A414B;
+    --ink:#E4E2DE; --ink-2:#A6A9AE; --ink-3:#6E747C;
+    --ember:#E07B45; --moss:#7FA05F; --wheat:#D9B24C; --crimson:#D1525F; --slate:#6B7C8C;
+    --ember-dim:#E07B4522; --moss-dim:#7FA05F22; --wheat-dim:#D9B24C22;
+    --crimson-dim:#D1525F22; --slate-dim:#6B7C8C22;
+    --mono:"Cascadia Code","Cascadia Mono","JetBrains Mono",ui-monospace,Consolas,monospace;
+    --sans:"Segoe UI Variable Text","Segoe UI",ui-sans-serif,-apple-system,system-ui,sans-serif;
+    --r:3px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --ground:#EEEDE9; --s1:#F7F6F3; --s2:#FFFFFF; --s3:#E7E5E0;
+      --line:#DBD8D2; --line-2:#BFBBB3;
+      --ink:#1E2126; --ink-2:#54585E; --ink-3:#878C93;
+      --ember:#B75A21; --moss:#5A7A3C; --wheat:#8C6A12; --crimson:#B03546; --slate:#4F6072;
+      --ember-dim:#B75A211F; --moss-dim:#5A7A3C1F; --wheat-dim:#8C6A121F;
+      --crimson-dim:#B035461F; --slate-dim:#4F60721F;
+    }
+  }
+  :root[data-theme="light"] {
+    --ground:#EEEDE9; --s1:#F7F6F3; --s2:#FFFFFF; --s3:#E7E5E0;
+    --line:#DBD8D2; --line-2:#BFBBB3;
+    --ink:#1E2126; --ink-2:#54585E; --ink-3:#878C93;
+    --ember:#B75A21; --moss:#5A7A3C; --wheat:#8C6A12; --crimson:#B03546; --slate:#4F6072;
+    --ember-dim:#B75A211F; --moss-dim:#5A7A3C1F; --wheat-dim:#8C6A121F;
+    --crimson-dim:#B035461F; --slate-dim:#4F60721F;
+  }
+  :root[data-theme="dark"] {
+    --ground:#131519; --s1:#191C21; --s2:#1F2329; --s3:#262B32;
+    --line:#2A2F37; --line-2:#3A414B;
+    --ink:#E4E2DE; --ink-2:#A6A9AE; --ink-3:#6E747C;
+    --ember:#E07B45; --moss:#7FA05F; --wheat:#D9B24C; --crimson:#D1525F; --slate:#6B7C8C;
+    --ember-dim:#E07B4522; --moss-dim:#7FA05F22; --wheat-dim:#D9B24C22;
+    --crimson-dim:#D1525F22; --slate-dim:#6B7C8C22;
+  }
+
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--ground); color:var(--ink);
+    font-family:var(--sans); font-size:15px; line-height:1.6;
+    -webkit-font-smoothing:antialiased; }
+  ::selection { background:var(--ember); color:var(--ground); }
+  :focus-visible { outline:2px solid var(--ember); outline-offset:2px; }
+
+  .wrap { max-width:1320px; margin:0 auto; padding:0 24px 96px; }
+  .prose { max-width:68ch; }
+
+  /* ---------- page chrome ---------- */
+  .masthead { border-bottom:1px solid var(--line); padding:56px 0 28px; margin-bottom:0; }
+  .eyebrow { font-family:var(--mono); font-size:11px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--ember); margin:0 0 14px; }
+  h1 { font-size:38px; line-height:1.1; letter-spacing:-.02em; font-weight:650;
+    margin:0 0 14px; text-wrap:balance; }
+  .lede { font-size:16px; color:var(--ink-2); margin:0; max-width:64ch; }
+
+  nav.seg { position:sticky; top:0; z-index:40; display:flex; gap:0;
+    background:var(--ground); border-bottom:1px solid var(--line); margin-bottom:44px; }
+  nav.seg button { appearance:none; background:none; border:0; cursor:pointer;
+    font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--ink-3); padding:15px 20px; border-bottom:2px solid transparent; margin-bottom:-1px; }
+  nav.seg button:hover { color:var(--ink); }
+  nav.seg button[aria-selected="true"] { color:var(--ember); border-bottom-color:var(--ember); }
+
+  section.pane[hidden] { display:none; }
+  h2 { font-size:13px; font-family:var(--mono); letter-spacing:.12em; text-transform:uppercase;
+    color:var(--ink-3); font-weight:500; margin:0 0 18px;
+    padding-bottom:10px; border-bottom:1px solid var(--line); }
+  h3 { font-size:17px; font-weight:600; letter-spacing:-.01em; margin:0 0 8px; }
+  p { margin:0 0 14px; color:var(--ink-2); }
+  .block { margin-bottom:56px; }
+  code { font-family:var(--mono); font-size:.88em; color:var(--ember);
+    background:var(--ember-dim); padding:1px 5px; border-radius:var(--r); }
+
+  /* ---------- foundations ---------- */
+  .ramp { display:grid; grid-template-columns:repeat(5,1fr); gap:1px;
+    background:var(--line); border:1px solid var(--line); }
+  .ramp > div { background:var(--s1); padding:16px 14px; }
+  .chipdot { width:12px; height:12px; border-radius:50%; display:block; margin-bottom:12px; }
+  .ramp b { display:block; font-family:var(--mono); font-size:11px; letter-spacing:.1em;
+    text-transform:uppercase; font-weight:500; margin-bottom:4px; }
+  .ramp span.hex { font-family:var(--mono); font-size:11px; color:var(--ink-3); }
+  .ramp p { font-size:12.5px; margin:8px 0 0; line-height:1.45; }
+
+  .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:1px;
+    background:var(--line); border:1px solid var(--line); }
+  .grid2 > div { background:var(--s1); padding:18px; }
+  .specrow { display:flex; justify-content:space-between; gap:16px; padding:7px 0;
+    border-bottom:1px solid var(--line); font-size:13px; }
+  .specrow:last-child { border-bottom:0; }
+  .specrow b { font-weight:500; color:var(--ink); }
+  .specrow span { font-family:var(--mono); font-size:12px; color:var(--ink-3);
+    font-variant-numeric:tabular-nums; text-align:right; }
+
+  .typespec { font-family:var(--mono); }
+  .typespec div { padding:9px 0; border-bottom:1px solid var(--line);
+    display:flex; align-items:baseline; gap:16px; }
+  .typespec div:last-child { border-bottom:0; }
+  .typespec .lbl { font-size:10.5px; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--ink-3); width:104px; flex:none; }
+
+  /* ---------- shared mockup shell ---------- */
+  .scroller { overflow-x:auto; padding-bottom:6px; }
+  .caption { font-family:var(--mono); font-size:11px; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--ink-3); margin:12px 0 0; }
+
+  .tabs { display:flex; gap:1px; background:var(--line); border:1px solid var(--line);
+    margin-bottom:20px; width:max-content; max-width:100%; overflow-x:auto; }
+  .tabs button { appearance:none; border:0; background:var(--s1); cursor:pointer;
+    font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--ink-3); padding:10px 16px; white-space:nowrap; }
+  .tabs button:hover { color:var(--ink); background:var(--s2); }
+  .tabs button[aria-selected="true"] { background:var(--s3); color:var(--ember); }
+
+  /* ---------- desktop app frame ---------- */
+  .app { width:1240px; height:812px; background:var(--ground);
+    border:1px solid var(--line-2); border-radius:5px; overflow:hidden;
+    display:flex; flex-direction:column; font-size:13px; }
+  .titlebar { height:36px; flex:none; display:flex; align-items:center;
+    border-bottom:1px solid var(--line); background:var(--s1); padding-left:12px; }
+  .ws { display:flex; align-items:center; gap:8px; font-family:var(--mono); font-size:11.5px; }
+  .ws .dot { width:7px; height:7px; border-radius:50%; background:var(--moss); }
+  .ws .path { color:var(--ink-3); }
+  .tb-center { flex:1; display:flex; justify-content:center; align-items:center; gap:8px; }
+  .wctl { display:flex; height:100%; }
+  .wctl i { width:44px; display:grid; place-items:center; font-style:normal;
+    font-family:var(--mono); font-size:11px; color:var(--ink-3); }
+  .body { flex:1; display:flex; min-height:0; }
+
+  .rail { width:52px; flex:none; border-right:1px solid var(--line); background:var(--s1);
+    display:flex; flex-direction:column; align-items:center; padding:8px 0; gap:4px; }
+  .rail a { width:36px; height:34px; display:grid; place-items:center; border-radius:var(--r);
+    color:var(--ink-3); text-decoration:none; }
+  .rail a.on { background:var(--ember-dim); color:var(--ember); }
+  .rail .spacer { flex:1; }
+  .rail svg { width:18px; height:18px; fill:none; stroke:currentColor;
+    stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+
+  .col { display:flex; flex-direction:column; min-height:0; min-width:0; }
+  .col.left { width:300px; flex:none; border-right:1px solid var(--line); background:var(--s1); }
+  .col.center { flex:1; }
+  .col.right { width:380px; flex:none; border-left:1px solid var(--line); background:var(--s1); }
+
+  .phead { height:34px; flex:none; display:flex; align-items:center; gap:8px;
+    padding:0 12px; border-bottom:1px solid var(--line);
+    font-family:var(--mono); font-size:10.5px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--ink-3); }
+  .phead .r { margin-left:auto; display:flex; gap:10px; letter-spacing:.06em; }
+  .pbody { flex:1; overflow:hidden; padding:12px; }
+  .pbody.flush { padding:0; }
+
+  /* composer */
+  .composer { border:1px solid var(--line-2); border-radius:var(--r); background:var(--s2);
+    padding:10px; font-size:13px; line-height:1.5; }
+  .composer .cue { color:var(--ember); font-family:var(--mono); }
+  .composer .cursor { display:inline-block; width:7px; height:14px; background:var(--ember);
+    vertical-align:-2px; }
+  .stages { margin-top:16px; display:flex; flex-direction:column; }
+  .stage { display:flex; align-items:baseline; gap:9px; padding:6px 0;
+    border-bottom:1px solid var(--line); font-size:12.5px; }
+  .stage:last-child { border-bottom:0; }
+  .stage .g { font-family:var(--mono); font-size:11px; width:11px; flex:none; }
+  .stage .n { font-family:var(--mono); font-size:11.5px; width:66px; flex:none; color:var(--ink); }
+  .stage .d { color:var(--ink-3); font-size:12px; }
+
+  /* DAG */
+  .canvas { position:relative; height:100%; background:
+      radial-gradient(circle at 1px 1px, var(--line) 1px, transparent 0) 0 0/22px 22px; }
+  .canvas .inner { position:relative; width:468px; height:372px; margin:14px auto; }
+  .canvas svg.edges { position:absolute; inset:0; width:100%; height:100%; overflow:visible; }
+  .edge { fill:none; stroke:var(--line-2); stroke-width:1.25; }
+  .edge.hot { stroke:var(--ember); }
+  .edge.blocked { stroke:var(--slate); stroke-dasharray:3 3; }
+
+  .node { position:absolute; width:200px; height:64px; background:var(--s2);
+    border:1px solid var(--line-2); border-left-width:2px; border-radius:var(--r);
+    padding:7px 9px; display:flex; flex-direction:column; gap:3px; }
+  .node .top { display:flex; align-items:center; gap:6px; }
+  .node .id { font-family:var(--mono); font-size:10.5px; color:var(--ink-3); }
+  .node .ttl { font-size:12.5px; font-weight:500; overflow:hidden;
+    white-space:nowrap; text-overflow:ellipsis; }
+  .node .meta { display:flex; align-items:center; gap:6px; margin-top:auto;
+    font-family:var(--mono); font-size:10px; color:var(--ink-3); }
+  .node .mdl { color:var(--ink-2); overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .node .t { margin-left:auto; font-variant-numeric:tabular-nums; }
+  .node .ws { font-family:var(--mono); font-size:10px; color:var(--ink-3);
+    overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .glyph { font-family:var(--mono); font-size:10px; }
+
+  .st-done    { border-color:var(--line-2); border-left-color:var(--moss); }
+  .st-done .glyph, .st-done .id { color:var(--moss); }
+  .st-run     { border-color:var(--ember); border-left-color:var(--ember);
+                box-shadow:0 0 0 3px var(--ember-dim); }
+  .st-run .glyph, .st-run .id { color:var(--ember); }
+  .st-block   { border-left-color:var(--slate); opacity:.72; }
+  .st-block .glyph, .st-block .id { color:var(--slate); }
+  .st-fail    { border-color:var(--line-2); border-left-color:var(--crimson); }
+  .st-fail .glyph, .st-fail .id { color:var(--crimson); }
+  .st-appr    { border-color:var(--wheat); border-left-color:var(--wheat);
+                box-shadow:0 0 0 3px var(--wheat-dim); }
+  .st-appr .glyph, .st-appr .id { color:var(--wheat); }
+
+  .pill { font-family:var(--mono); font-size:9.5px; letter-spacing:.08em;
+    text-transform:uppercase; padding:1.5px 5px; border-radius:2px; white-space:nowrap; }
+  .p-run { background:var(--ember-dim); color:var(--ember); }
+  .p-done { background:var(--moss-dim); color:var(--moss); }
+  .p-block { background:var(--slate-dim); color:var(--slate); }
+  .p-fail { background:var(--crimson-dim); color:var(--crimson); }
+  .p-appr { background:var(--wheat-dim); color:var(--wheat); }
+  .p-mute { background:var(--s3); color:var(--ink-3); }
+
+  /* drawer tabs */
+  .dtabs { display:flex; border-bottom:1px solid var(--line); flex:none; }
+  .dtabs span { font-family:var(--mono); font-size:10.5px; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--ink-3); padding:9px 11px;
+    border-bottom:2px solid transparent; margin-bottom:-1px; }
+  .dtabs span.on { color:var(--ember); border-bottom-color:var(--ember); }
+
+  .ladder { font-family:var(--mono); font-size:11px; }
+  .ladder .lr { display:flex; align-items:center; gap:8px; padding:5px 0;
+    border-bottom:1px solid var(--line); }
+  .ladder .lr .n { color:var(--ink-3); width:12px; flex:none; }
+  .ladder .lr .l { flex:1; color:var(--ink-2); overflow:hidden;
+    white-space:nowrap; text-overflow:ellipsis; }
+  .ladder .lr .tk { color:var(--ink-3); font-variant-numeric:tabular-nums; }
+  .ladder .lr.pin .l { color:var(--ink); }
+  .ladder .lr.untrusted { background:var(--crimson-dim); margin:0 -12px; padding-left:12px;
+    padding-right:12px; }
+  .ladder .lr.untrusted .l { color:var(--crimson); }
+  .ladder .lr.evict { opacity:.6; }
+  .ladder .tot { display:flex; gap:8px; padding-top:9px; color:var(--ink-3); }
+  .ladder .tot .v { margin-left:auto; color:var(--ink); font-variant-numeric:tabular-nums; }
+
+  .meter { height:4px; background:var(--s3); border-radius:2px; overflow:hidden; margin-top:8px; }
+  .meter i { display:block; height:100%; background:var(--ember); }
+
+  .approval { border:1px solid var(--wheat); border-radius:var(--r);
+    background:var(--wheat-dim); padding:11px; margin-top:14px; }
+  .approval .hd { display:flex; align-items:center; gap:7px; font-family:var(--mono);
+    font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--wheat);
+    margin-bottom:7px; }
+  .approval .cmd { font-family:var(--mono); font-size:12px; color:var(--ink);
+    background:var(--s2); border:1px solid var(--line); border-radius:2px;
+    padding:6px 8px; margin-bottom:7px; }
+  .approval .why { font-size:12px; color:var(--ink-2); margin-bottom:10px; }
+  .btnrow { display:flex; gap:6px; }
+  .btn { font-family:var(--mono); font-size:10.5px; letter-spacing:.06em; padding:5px 10px;
+    border:1px solid var(--line-2); border-radius:2px; background:var(--s2);
+    color:var(--ink-2); cursor:default; }
+  .btn.primary { background:var(--wheat); border-color:var(--wheat); color:var(--ground); }
+  .btn.danger { color:var(--crimson); border-color:var(--crimson); }
+
+  /* status strip */
+  .strip { height:28px; flex:none; border-top:1px solid var(--line); background:var(--s1);
+    display:flex; align-items:center; gap:0; padding:0 12px;
+    font-family:var(--mono); font-size:10.5px; color:var(--ink-3); }
+  .strip .seg2 { display:flex; align-items:center; gap:6px; padding:0 12px;
+    border-right:1px solid var(--line); height:100%; }
+  .strip .seg2:first-child { padding-left:0; }
+  .strip .seg2.last { border-right:0; margin-left:auto; padding-right:0; }
+  .strip b { color:var(--ink-2); font-weight:400; }
+  .strip .num { color:var(--ink); font-variant-numeric:tabular-nums; }
+  .vram { width:64px; height:4px; background:var(--s3); border-radius:2px; overflow:hidden; }
+  .vram i { display:block; height:100%; background:var(--ember); }
+
+  /* tables */
+  table.dt { width:100%; border-collapse:collapse; font-family:var(--mono); font-size:11px;
+    font-variant-numeric:tabular-nums; }
+  table.dt th { text-align:left; font-weight:500; font-size:10px; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--ink-3); padding:0 10px 8px; border-bottom:1px solid var(--line); }
+  table.dt td { padding:7px 10px; border-bottom:1px solid var(--line); color:var(--ink-2); }
+  table.dt tr:hover td { background:var(--s2); }
+  table.dt td.name { color:var(--ink); }
+  table.dt td.r { text-align:right; }
+  .bar { display:inline-block; width:44px; height:4px; background:var(--s3);
+    border-radius:2px; overflow:hidden; vertical-align:middle; margin-right:6px; }
+  .bar i { display:block; height:100%; }
+
+  /* timeline */
+  .lanes { padding:14px 12px; }
+  .lane { display:flex; align-items:center; gap:10px; height:30px; }
+  .lane .lname { font-family:var(--mono); font-size:10px; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--ink-3); width:74px; flex:none; text-align:right; }
+  .track { flex:1; height:16px; position:relative; border-left:1px solid var(--line); }
+  .ev { position:absolute; top:3px; height:10px; border-radius:1px; }
+  .playhead { position:absolute; top:0; bottom:0; width:1px; background:var(--ember); z-index:3; }
+  .playhead::before { content:""; position:absolute; top:-4px; left:-3px;
+    border-left:3.5px solid transparent; border-right:3.5px solid transparent;
+    border-top:5px solid var(--ember); }
+  .ruler { display:flex; margin-left:84px; border-top:1px solid var(--line);
+    font-family:var(--mono); font-size:9.5px; color:var(--ink-3); }
+  .ruler span { flex:1; padding:4px 0 0 4px; border-right:1px solid var(--line); }
+
+  /* diff */
+  .difftree { font-family:var(--mono); font-size:11.5px; }
+  .difftree .grp { font-size:10px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--ink-3); padding:12px 0 5px; }
+  .difftree .f { display:flex; gap:7px; align-items:center; padding:4px 6px;
+    border-radius:2px; color:var(--ink-2); }
+  .difftree .f.on { background:var(--ember-dim); color:var(--ember); }
+  .difftree .f .ad { margin-left:auto; color:var(--moss); font-size:10px; }
+  .difftree .f .rm { color:var(--crimson); font-size:10px; }
+
+  .diffpane { font-family:var(--mono); font-size:11.5px; line-height:1.65;
+    display:grid; grid-template-columns:1fr 1fr; height:100%; }
+  .diffpane > div { overflow:hidden; }
+  .diffpane > div:first-child { border-right:1px solid var(--line); }
+  .dl { display:flex; }
+  .dl .ln { width:34px; flex:none; text-align:right; padding-right:9px;
+    color:var(--ink-3); user-select:none; font-size:10.5px; }
+  .dl .tx { white-space:pre; overflow:hidden; }
+  .dl.add { background:var(--moss-dim); }
+  .dl.del { background:var(--crimson-dim); }
+  .dl.hunk { color:var(--ink-3); background:var(--s2); }
+  .kw { color:var(--ember); } .str { color:var(--moss); } .cmt { color:var(--ink-3); }
+
+  /* settings */
+  .snav { font-family:var(--mono); font-size:11.5px; }
+  .snav div { padding:6px 9px; border-radius:2px; color:var(--ink-3); }
+  .snav div.on { background:var(--ember-dim); color:var(--ember); }
+  .matrix { width:100%; border-collapse:collapse; font-family:var(--mono); font-size:10.5px; }
+  .matrix th { font-weight:500; font-size:9.5px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--ink-3); padding:6px 8px; border-bottom:1px solid var(--line); text-align:center; }
+  .matrix th:first-child { text-align:left; }
+  .matrix td { padding:6px 8px; border-bottom:1px solid var(--line); text-align:center; }
+  .matrix td:first-child { text-align:left; color:var(--ink-2); }
+  .mk { font-size:9.5px; letter-spacing:.06em; padding:1.5px 6px; border-radius:2px; }
+  .mk.allow { background:var(--moss-dim); color:var(--moss); }
+  .mk.ask { background:var(--wheat-dim); color:var(--wheat); }
+  .mk.deny { background:var(--crimson-dim); color:var(--crimson); }
+
+  .provcard { border:1px solid var(--line); border-radius:var(--r); background:var(--s2);
+    padding:11px; margin-bottom:8px; }
+  .provcard .ph { display:flex; align-items:center; gap:7px; margin-bottom:7px; }
+  .provcard .pn { font-family:var(--mono); font-size:12px; color:var(--ink); }
+  .provcard .pm { font-family:var(--mono); font-size:10.5px; color:var(--ink-3);
+    display:flex; justify-content:space-between; }
+
+  /* ---------- terminal ---------- */
+  .term { width:800px; background:var(--ground); border:1px solid var(--line-2);
+    border-radius:5px; overflow:hidden; font-family:var(--mono); font-size:12.5px;
+    line-height:1.55; }
+  .term .tt { height:30px; display:flex; align-items:center; padding:0 12px;
+    border-bottom:1px solid var(--line); background:var(--s1);
+    font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3); }
+  .term .tb { padding:12px 14px; }
+  .term .tb .stg { display:inline-block; width:74px; }
+  .tpanel { border:1px solid var(--line-2); border-radius:var(--r); margin:8px 0; }
+  .tpanel .th { font-size:10px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--ink-3); padding:5px 10px; border-bottom:1px solid var(--line); display:flex; }
+  .tpanel .th .r { margin-left:auto; }
+  .tpanel .tc { padding:7px 10px; }
+  .tline { display:flex; gap:8px; align-items:baseline; padding:1.5px 0; }
+  .tline .tid { color:var(--ink-3); width:26px; flex:none; }
+  .tline .tnm { flex:1; color:var(--ink-2); overflow:hidden;
+    white-space:nowrap; text-overflow:ellipsis; }
+  .tline .tst { width:76px; flex:none; }
+  .tline .tmd { width:118px; flex:none; color:var(--ink-3);
+    overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .tline .tmd.wide { width:216px; }
+  .tline .tt2 { width:52px; flex:none; text-align:right; color:var(--ink-3);
+    font-variant-numeric:tabular-nums; }
+  .tsub { color:var(--ink-3); padding-left:34px; }
+  .dim { color:var(--ink-3); } .em { color:var(--ember); } .mo { color:var(--moss); }
+  .wh { color:var(--wheat); } .cr { color:var(--crimson); } .sl { color:var(--slate); }
+  .b { color:var(--ink); }
+  .tfoot { border-top:1px solid var(--line); padding:6px 14px; font-size:11px;
+    color:var(--ink-3); display:flex; gap:16px; }
+  .tfoot .r { margin-left:auto; }
+  .kbd { border:1px solid var(--line-2); border-radius:2px; padding:0 4px;
+    font-size:10.5px; color:var(--ink-2); }
+
+  /* ---------- file tree ---------- */
+  .fsearch { display:flex; gap:7px; align-items:center; border:1px solid var(--line-2);
+    border-radius:var(--r); background:var(--s2); padding:5px 8px;
+    font-family:var(--mono); font-size:11px; color:var(--ink-3); margin-bottom:11px; }
+  .ftree { font-family:var(--mono); font-size:11.5px; }
+  .ftree .fr { display:flex; align-items:center; gap:6px; padding:3px 6px;
+    border-radius:2px; color:var(--ink-2); }
+  .ftree .fr:hover { background:var(--s2); }
+  .ftree .fr.on { background:var(--ember-dim); color:var(--ember); }
+  .ftree .fr.dim { opacity:.42; }
+  .ftree .nm { flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .ftree .tw { font-size:9.5px; flex:none; }
+  .ftree .dir { color:var(--ink); }
+  .flegend { font-family:var(--mono); font-size:10px; color:var(--ink-3);
+    display:flex; flex-direction:column; gap:4px; padding-top:11px;
+    margin-top:11px; border-top:1px solid var(--line); }
+
+  /* ---------- chat thread ---------- */
+  .thread { display:flex; flex-direction:column; gap:16px; padding:16px 18px; }
+  .turn { display:flex; gap:11px; }
+  .turn .av { width:22px; height:22px; border-radius:3px; flex:none; display:grid;
+    place-items:center; font-family:var(--mono); font-size:9px; letter-spacing:.03em; }
+  .turn.user .av { background:var(--s3); color:var(--ink-2); }
+  .turn.model .av { background:var(--ember-dim); color:var(--ember); }
+  .turn .tbody { flex:1; min-width:0; }
+  .turn .who { font-family:var(--mono); font-size:9.5px; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--ink-3); margin-bottom:5px;
+    display:flex; gap:9px; align-items:center; }
+  .turn .msg { font-size:13.5px; line-height:1.6; color:var(--ink); }
+  .turn .msg p { margin:0 0 9px; color:var(--ink); }
+  .turn .msg p:last-child { margin-bottom:0; }
+  .think { border-left:2px solid var(--slate); background:var(--slate-dim);
+    padding:7px 11px; margin:9px 0; font-size:12.5px; color:var(--ink-3);
+    line-height:1.5; border-radius:0 var(--r) var(--r) 0; }
+  .toolchip { display:inline-flex; align-items:center; gap:7px; font-family:var(--mono);
+    font-size:10.5px; border:1px solid var(--line-2); border-radius:2px;
+    padding:3px 8px; margin:7px 6px 0 0; color:var(--ink-2); background:var(--s2); }
+
+  .plancard { border:1px solid var(--ember); border-radius:var(--r);
+    background:var(--s2); margin-top:11px; overflow:hidden; }
+  .plancard .ph2 { display:flex; align-items:center; gap:8px; padding:8px 11px;
+    border-bottom:1px solid var(--line); font-family:var(--mono); font-size:10px;
+    letter-spacing:.1em; text-transform:uppercase; color:var(--ember); }
+  .plancard .pc { padding:8px 11px; font-family:var(--mono); font-size:11px; }
+  .plancard .pn2 { display:flex; gap:9px; padding:3px 0; color:var(--ink-2); }
+  .plancard .pn2 .w { color:var(--ink-3); margin-left:auto; }
+  .plancard .pf { display:flex; gap:6px; align-items:center; padding:9px 11px;
+    border-top:1px solid var(--line); background:var(--s1); }
+
+  /* ---------- composer ---------- */
+  .cbox { border-top:1px solid var(--line); background:var(--s1); padding:11px 14px; flex:none; }
+  .cinput { border:1px solid var(--line-2); border-radius:var(--r); background:var(--s2);
+    padding:9px 11px; font-size:13.5px; color:var(--ink); line-height:1.5; }
+  .cinput.focus { border-color:var(--ember); }
+  .crow { display:flex; align-items:center; gap:7px; margin-top:9px;
+    font-family:var(--mono); font-size:10.5px; color:var(--ink-3); }
+  .sel { display:flex; align-items:center; gap:6px; border:1px solid var(--line-2);
+    border-radius:2px; padding:3px 8px; background:var(--s2); }
+  .sel .k { color:var(--ink-3); } .sel .v { color:var(--ink); }
+  .sel.hot { border-color:var(--ember); } .sel.hot .v { color:var(--ember); }
+
+  /* ---------- dropdown ---------- */
+  .dd { position:absolute; z-index:30; background:var(--s2); border:1px solid var(--line-2);
+    border-radius:var(--r); box-shadow:0 10px 30px rgba(0,0,0,.45); min-width:296px; overflow:hidden; }
+  .dd .dh2 { font-family:var(--mono); font-size:9.5px; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--ink-3); padding:9px 12px 5px; }
+  .dd .di { display:flex; align-items:center; gap:9px; padding:6px 12px;
+    font-family:var(--mono); font-size:11px; color:var(--ink-2); }
+  .dd .di.on { background:var(--ember-dim); color:var(--ember); }
+  .dd .di .r2 { margin-left:auto; font-size:10px; color:var(--ink-3); }
+  .dd .sep { height:1px; background:var(--line); margin:6px 0; }
+
+  /* ---------- launcher ---------- */
+  .launch { flex:1; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; padding:36px; }
+  .lcard { width:580px; }
+  .wsitem { display:flex; align-items:center; gap:12px; padding:11px 13px;
+    border:1px solid var(--line); border-radius:var(--r); background:var(--s1); margin-bottom:7px; }
+  .wsitem.on { border-color:var(--ember); background:var(--s2); }
+  .wsitem .wn { font-size:13.5px; font-weight:500; }
+  .wsitem .wp { font-family:var(--mono); font-size:10.5px; color:var(--ink-3); }
+  .wsitem .wr { margin-left:auto; text-align:right; font-family:var(--mono);
+    font-size:10px; color:var(--ink-3); line-height:1.6; }
+
+  .segbtn { display:flex; gap:0; border:1px solid var(--line-2); border-radius:2px; overflow:hidden; }
+  .segbtn span { font-family:var(--mono); font-size:9.5px; letter-spacing:.08em;
+    text-transform:uppercase; padding:3px 9px; color:var(--ink-3); background:var(--s2); }
+  .segbtn span.on { background:var(--ember-dim); color:var(--ember); }
+
+  @media (max-width:640px) {
+    .wrap { padding:0 16px 72px; }
+    h1 { font-size:28px; }
+    .ramp { grid-template-columns:1fr 1fr; }
+  }
+  @media (prefers-reduced-motion:no-preference) {
+    .st-run { animation:pulse 2.4s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{box-shadow:0 0 0 3px var(--ember-dim);}
+                       50%{box-shadow:0 0 0 5px var(--ember-dim);} }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Auto-Code-Agent &#183; Interface design</p>
+    <h1>Desktop &amp; CLI layout</h1>
+    <p class="lede">Two front-ends over one daemon. State reads as temperature &#8212; cold queued, warm running,
+      hot failed &#8212; so a twenty-node run resolves at a glance before a single label is read.</p>
+  </header>
+
+  <nav class="seg" role="tablist">
+    <button role="tab" aria-selected="true" data-pane="found">Foundations</button>
+    <button role="tab" aria-selected="false" data-pane="desk">Desktop</button>
+    <button role="tab" aria-selected="false" data-pane="cli">Interactive CLI</button>
+  </nav>
+
+  <!-- ============ FOUNDATIONS ============ -->
+  <section class="pane" id="found">
+
+    <div class="block">
+      <h2>The heat ramp</h2>
+      <div class="prose">
+        <p>Node state is the single most-scanned value in the product, so it is encoded three
+        ways at once: hue, glyph, and border weight. The ramp runs cold to hot, and urgency
+        rises with temperature &#8212; you look at the warm end first.</p>
+      </div>
+      <div class="ramp" style="margin-top:22px">
+        <div><span class="chipdot" style="background:var(--slate)"></span>
+          <b style="color:var(--slate)">&#9675; Queued</b><span class="hex">#6B7C8C</span>
+          <p>Blocked or waiting on a lock. Inert, dimmed to 72%.</p></div>
+        <div><span class="chipdot" style="background:var(--moss)"></span>
+          <b style="color:var(--moss)">&#10003; Done</b><span class="hex">#7FA05F</span>
+          <p>Passed gates and review. Deliberately quiet &#8212; finished work recedes.</p></div>
+        <div><span class="chipdot" style="background:var(--wheat)"></span>
+          <b style="color:var(--wheat)">&#9888; Waiting on you</b><span class="hex">#D9B24C</span>
+          <p>Approval or escalation. The only state that pulses in the CLI.</p></div>
+        <div><span class="chipdot" style="background:var(--ember)"></span>
+          <b style="color:var(--ember)">&#9654; Running</b><span class="hex">#E07B45</span>
+          <p>Also the interactive accent. Live work and clickable share one hue.</p></div>
+        <div><span class="chipdot" style="background:var(--crimson)"></span>
+          <b style="color:var(--crimson)">&#10007; Failed</b><span class="hex">#D1525F</span>
+          <p>Gate or permanent failure. Also marks untrusted tool output.</p></div>
+      </div>
+      <p class="caption">Ramp doubles as the timeline event legend and the CLI palette</p>
+    </div>
+
+    <div class="block">
+      <h2>Type &amp; density</h2>
+      <div class="grid2">
+        <div>
+          <h3>Mono carries the identity</h3>
+          <p style="font-size:13.5px">Every measurement, ID, state, and path is monospaced with
+            tabular figures so columns lock. Sans is the quiet delivery vehicle for prose only &#8212;
+            the inverse of a typical app.</p>
+          <div class="typespec" style="margin-top:14px">
+            <div><span class="lbl">Micro</span><span style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)">Write set &#183; locks held</span></div>
+            <div><span class="lbl">Data</span><span style="font-size:12px;font-variant-numeric:tabular-nums">12,400 / 196,608 tok</span></div>
+            <div><span class="lbl">Identifier</span><span style="font-size:12px">src/mw/rateLimit.ts</span></div>
+            <div><span class="lbl">UI body</span><span style="font-family:var(--sans);font-size:13px">Implement the token-bucket limiter</span></div>
+            <div><span class="lbl">View title</span><span style="font-family:var(--sans);font-size:20px;font-weight:600;letter-spacing:-.01em">Model manager</span></div>
+          </div>
+        </div>
+        <div>
+          <h3>Console density</h3>
+          <p style="font-size:13.5px">Hairline-divided flush panels on a 4px grid. No drop shadows,
+            no floating cards &#8212; surfaces separate by 1px rule and one step of elevation.</p>
+          <div style="margin-top:14px">
+            <div class="specrow"><b>Base grid</b><span>4px</span></div>
+            <div class="specrow"><b>Title bar / status strip</b><span>36px &#183; 28px</span></div>
+            <div class="specrow"><b>Icon rail</b><span>52px</span></div>
+            <div class="specrow"><b>Side panels</b><span>300px &#183; 380px</span></div>
+            <div class="specrow"><b>Panel header</b><span>34px</span></div>
+            <div class="specrow"><b>Table row</b><span>26px</span></div>
+            <div class="specrow"><b>Corner radius</b><span>3px max</span></div>
+            <div class="specrow"><b>Min window</b><span>1024 &#215; 640</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="block">
+      <h2>Rules both surfaces obey</h2>
+      <div class="grid2">
+        <div><h3>Untrusted content is visibly fenced</h3>
+          <p style="font-size:13.5px">Anything from a tool, file, or network carries a crimson
+          rule and an <code>untrusted</code> tag wherever it renders. Users can see the trust
+          boundary the guard enforces.</p></div>
+        <div><h3>Cancel is always one key away</h3>
+          <p style="font-size:13.5px"><code>esc</code> in the CLI, a persistent control in the
+          status strip. Cancelling checkpoints the run &#8212; it never discards work.</p></div>
+        <div><h3>Nothing interactive-only</h3>
+          <p style="font-size:13.5px">Every TUI action has a flag equivalent, and
+          <code>--json</code> emits the same event stream the desktop consumes.</p></div>
+        <div><h3>Irreversible needs a fresh yes</h3>
+          <p style="font-size:13.5px">Push, deploy, publish, and outbound POST prompt at execution
+          time in wheat, regardless of plan-level approval.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DESKTOP ============ -->
+  <section class="pane" id="desk" hidden>
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" data-view="v-launch">Launcher</button>
+      <button role="tab" aria-selected="false" data-view="v-chat">Chat</button>
+      <button role="tab" aria-selected="false" data-view="v-run">Run graph</button>
+      <button role="tab" aria-selected="false" data-view="v-files">Files</button>
+      <button role="tab" aria-selected="false" data-view="v-models">Models</button>
+      <button role="tab" aria-selected="false" data-view="v-diff">Diff review</button>
+      <button role="tab" aria-selected="false" data-view="v-time">Timeline</button>
+      <button role="tab" aria-selected="false" data-view="v-set">Settings</button>
+    </div>
+
+    <div class="prose" style="margin-bottom:22px">
+      <p>Chat is the spine. A run is not a separate mode &#8212; it is something a conversation
+      escalates into, so <b style="color:var(--ink);font-weight:500">Chat</b> and
+      <b style="color:var(--ink);font-weight:500">Run graph</b> are two representations of one
+      session, swapped by a toggle in the panel header. The file tree is a persistent left panel
+      across both.</p>
+    </div>
+
+    <!-- ---------- LAUNCHER ---------- -->
+    <div class="viewwrap" id="v-launch">
+      <div class="scroller">
+        <div class="app" style="height:660px">
+          <div class="titlebar">
+            <div class="ws"><span class="dot" style="background:var(--ink-3)"></span>
+              <span>no workspace</span></div>
+            <div class="tb-center"></div>
+            <div class="wctl"><i>&#8212;</i><i>&#9634;</i><i>&#10005;</i></div>
+          </div>
+          <div class="body">
+            <div class="rail" data-active="session"></div>
+            <div class="col" style="flex:1">
+              <div class="launch">
+                <div class="lcard">
+                  <div style="font-family:var(--mono);font-size:10px;letter-spacing:.14em;
+                    text-transform:uppercase;color:var(--ember);margin-bottom:10px">Auto-Code-Agent</div>
+                  <h3 style="font-size:22px;margin-bottom:6px">Open a workspace</h3>
+                  <p style="font-size:13.5px;margin-bottom:22px">A workspace is a repo the agent can
+                    read, index, and write to. Everything is scoped to it &#8212; permissions,
+                    memory, and run history.</p>
+
+                  <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;
+                    text-transform:uppercase;color:var(--ink-3);margin-bottom:9px">Recent</div>
+
+                  <div class="wsitem on">
+                    <span style="font-family:var(--mono);color:var(--ember)">&#9656;</span>
+                    <div><div class="wn">api-svc</div><div class="wp">~/projects/api-svc</div></div>
+                    <div class="wr"><div><span class="mo">&#10003;</span> indexed &#183; 4,812 chunks</div>
+                      <div>last run 2h ago &#183; qwen3.6:35b</div></div>
+                  </div>
+                  <div class="wsitem">
+                    <span style="font-family:var(--mono);color:var(--ink-3)">&#9656;</span>
+                    <div><div class="wn">dashboard-ui</div><div class="wp">~/projects/dashboard-ui</div></div>
+                    <div class="wr"><div><span class="wh">&#9888;</span> index stale &#183; 214 files changed</div>
+                      <div>last run 6d ago</div></div>
+                  </div>
+                  <div class="wsitem">
+                    <span style="font-family:var(--mono);color:var(--ink-3)">&#9656;</span>
+                    <div><div class="wn">infra-terraform</div><div class="wp">~/work/infra-terraform</div></div>
+                    <div class="wr"><div><span class="sl">&#9675;</span> not indexed</div>
+                      <div>never run</div></div>
+                  </div>
+
+                  <div style="display:flex;gap:7px;margin-top:18px">
+                    <span class="btn" style="border-color:var(--ember);color:var(--ember)">Open folder&#8230;</span>
+                    <span class="btn">Clone from git&#8230;</span>
+                    <span class="btn">Attach to running daemon</span>
+                  </div>
+
+                  <div style="margin-top:26px;padding-top:16px;border-top:1px solid var(--line);
+                    font-family:var(--mono);font-size:10.5px;color:var(--ink-3);display:flex;gap:18px">
+                    <span><span class="mo">&#9679;</span> ollama <span class="dim">4 models</span></span>
+                    <span><span class="mo">&#9679;</span> lmstudio <span class="dim">3 models</span></span>
+                    <span><span class="sl">&#9679;</span> llama.cpp <span class="dim">stopped</span></span>
+                    <span><span class="wh">&#9679;</span> cloud <span class="dim">no key</span></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="strip">
+            <span class="seg2"><span style="width:6px;height:6px;border-radius:50%;
+              background:var(--moss);display:block"></span><b>daemon</b> :51733</span>
+            <span class="seg2 last"><b>no workspace open</b></span>
+          </div>
+        </div>
+      </div>
+      <p class="caption">Launcher &#8212; provider health is visible before you start, not after a run fails</p>
+    </div>
+
+    <!-- ---------- CHAT ---------- -->
+    <div class="viewwrap" id="v-chat" hidden>
+      <div class="scroller">
+        <div class="app">
+          <div class="titlebar" style="position:relative">
+            <div class="ws"><span class="dot"></span><span>api-svc</span>
+              <span class="path">~/projects/api-svc</span>
+              <span style="color:var(--ember);font-size:9px">&#9662;</span></div>
+            <div class="tb-center"><span class="pill p-mute">chat &#183; no active run</span></div>
+            <div class="wctl"><i>&#8212;</i><i>&#9634;</i><i>&#10005;</i></div>
+
+            <div class="dd" style="left:8px;top:34px">
+              <div class="dh2">Workspace</div>
+              <div class="di on"><span>&#9656;</span><span>api-svc</span>
+                <span class="r2">indexed</span></div>
+              <div class="di"><span>&#9656;</span><span>dashboard-ui</span>
+                <span class="r2 wh">stale</span></div>
+              <div class="di"><span>&#9656;</span><span>infra-terraform</span>
+                <span class="r2">not indexed</span></div>
+              <div class="sep"></div>
+              <div class="di"><span class="em">+</span><span>Open folder&#8230;</span>
+                <span class="r2">ctrl+O</span></div>
+              <div class="di"><span class="em">+</span><span>Clone from git&#8230;</span></div>
+              <div class="sep"></div>
+              <div class="di"><span>&#8942;</span><span>Re-index workspace</span>
+                <span class="r2">4,812 chunks</span></div>
+            </div>
+          </div>
+
+          <div class="body">
+            <div class="rail" data-active="session"></div>
+
+            <!-- file tree -->
+            <div class="col left" style="width:240px">
+              <div class="phead">Files<span class="r"><span>git: feature/rate-limit</span></span></div>
+              <div class="pbody">
+                <div class="fsearch"><span class="dim">&#8981;</span><span>filter&#8230;</span></div>
+                <div class="ftree">
+                  <div class="fr"><span class="dim">&#9662;</span><span class="nm dir">src</span></div>
+                  <div class="fr" style="padding-left:18px"><span class="dim">&#9662;</span>
+                    <span class="nm dir">mw</span><span class="tw sl">&#128274;</span></div>
+                  <div class="fr on" style="padding-left:32px"><span class="nm">rateLimit.ts</span>
+                    <span class="tw mo">+84</span></div>
+                  <div class="fr" style="padding-left:32px"><span class="nm">index.ts</span>
+                    <span class="tw mo">&#9679;</span></div>
+                  <div class="fr" style="padding-left:32px"><span class="nm">auth.ts</span></div>
+                  <div class="fr" style="padding-left:18px"><span class="dim">&#9656;</span>
+                    <span class="nm dir">routes</span></div>
+                  <div class="fr" style="padding-left:18px"><span class="dim">&#9656;</span>
+                    <span class="nm dir">lib</span></div>
+                  <div class="fr"><span class="dim">&#9662;</span><span class="nm dir">test</span></div>
+                  <div class="fr" style="padding-left:18px"><span class="nm">rateLimit.spec.ts</span>
+                    <span class="tw mo">+112</span></div>
+                  <div class="fr" style="padding-left:18px"><span class="nm">upload.spec.ts</span></div>
+                  <div class="fr"><span class="dim">&#9656;</span><span class="nm dir">docs</span></div>
+                  <div class="fr dim"><span class="dim">&#9656;</span><span class="nm dir">node_modules</span>
+                    <span class="tw">not indexed</span></div>
+                  <div class="fr dim"><span class="dim">&#9656;</span><span class="nm dir">dist</span>
+                    <span class="tw">gitignored</span></div>
+                  <div class="fr"><span class="nm">package.json</span></div>
+                  <div class="fr"><span class="nm">tsconfig.json</span></div>
+                </div>
+                <div class="flegend">
+                  <div><span class="mo">&#9679;</span> modified by agent, uncommitted</div>
+                  <div><span class="sl">&#128274;</span> locked &#8212; in a running node's write set</div>
+                  <div><span class="dim">dimmed</span> excluded from the T3 index</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- thread -->
+            <div class="col center">
+              <div class="phead">Session
+                <span class="r">
+                  <span class="segbtn"><span class="on">thread</span><span>graph</span></span>
+                  <span>12 turns</span></span></div>
+              <div class="pbody flush" style="display:flex;flex-direction:column">
+                <div class="thread" style="flex:1">
+
+                  <div class="turn user">
+                    <span class="av">YOU</span>
+                    <div class="tbody">
+                      <div class="who"><span>you</span><span class="dim">14:19</span></div>
+                      <div class="msg">how does the upload endpoint authenticate right now?</div>
+                    </div>
+                  </div>
+
+                  <div class="turn model">
+                    <span class="av">Q35</span>
+                    <div class="tbody">
+                      <div class="who"><span>qwen3.6:35b</span><span class="dim">ollama &#183; 3.1s &#183; 1,840 tok</span></div>
+                      <span class="toolchip"><span class="mo">&#10003;</span> read_file <span class="dim">src/mw/auth.ts</span></span>
+                      <span class="toolchip"><span class="mo">&#10003;</span> grep <span class="dim">"upload" &#183; 6 hits</span></span>
+                      <div class="msg" style="margin-top:9px">
+                        <p>It uses a bearer token checked in <code style="font-size:11.5px">requireAuth</code>
+                        (src/mw/auth.ts:34), applied per-route rather than globally. The upload route
+                        mounts it at <code style="font-size:11.5px">src/routes/upload.ts:12</code>.</p>
+                        <p>There is no rate limiting anywhere in the middleware chain.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="turn user">
+                    <span class="av">YOU</span>
+                    <div class="tbody">
+                      <div class="who"><span>you</span><span class="dim">14:21</span></div>
+                      <div class="msg">add rate limiting to it &#8212; 100 req/min per key</div>
+                    </div>
+                  </div>
+
+                  <div class="turn model">
+                    <span class="av">Q35</span>
+                    <div class="tbody">
+                      <div class="who"><span>qwen3.6:35b</span><span class="dim">ollama</span>
+                        <span class="pill p-mute">switched to plan mode</span></div>
+                      <div class="think">Needs a limiter module, a wiring change, and tests. The
+                        wiring touches the same files as the limiter, so those two cannot run in
+                        parallel &#8212; declaring the write sets will serialize them.</div>
+                      <div class="plancard">
+                        <div class="ph2"><span>&#9656;</span><span>proposed plan &#183; 6 nodes &#183; 2 branches</span>
+                          <span style="margin-left:auto;letter-spacing:0;text-transform:none;
+                            color:var(--ink-3)">est 12k tok &#183; $0.00</span></div>
+                        <div class="pc">
+                          <div class="pn2"><span class="dim">n1</span><span>read middleware config</span>
+                            <span class="w">read src/mw/**</span></div>
+                          <div class="pn2"><span class="dim">n2</span><span>implement limiter</span>
+                            <span class="w">write src/mw/rateLimit.ts</span></div>
+                          <div class="pn2"><span class="dim">n3</span><span>add limiter tests</span>
+                            <span class="w">write test/rateLimit.spec.ts</span></div>
+                          <div class="pn2"><span class="dim">n4</span><span>wire into router</span>
+                            <span class="w">write src/mw/index.ts</span></div>
+                          <div class="pn2"><span class="dim">n5</span><span>benchmark throughput</span>
+                            <span class="w">read-only</span></div>
+                          <div class="pn2"><span class="dim">n6</span><span>push branch</span>
+                            <span class="w cr">irreversible</span></div>
+                        </div>
+                        <div class="pf"><span class="btn" style="border-color:var(--ember);
+                          background:var(--ember);color:var(--ground)">Approve &amp; run</span>
+                          <span class="btn">Edit plan</span><span class="btn">Reject</span>
+                          <span style="margin-left:auto;font-family:var(--mono);font-size:10px;
+                            color:var(--ink-3)">n6 will ask again at execution</span></div>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                <div class="cbox">
+                  <div class="cinput focus">reject n6 &#8212; I'll push manually<span class="cursor"
+                    style="height:14px"></span></div>
+                  <div class="crow">
+                    <span class="sel hot"><span class="k">model</span>
+                      <span class="v">qwen3.6:35b</span><span class="dim">&#9662;</span></span>
+                    <span class="sel"><span class="k">mode</span><span class="v">plan &amp; run</span>
+                      <span class="dim">&#9662;</span></span>
+                    <span class="sel"><span class="k">tools</span><span class="v">read-only</span>
+                      <span class="dim">&#9662;</span></span>
+                    <span class="dim">@ file &#183; # symbol &#183; / command</span>
+                    <span style="margin-left:auto" class="dim">12,400 ctx</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- model picker open -->
+            <div class="col right" style="width:340px;position:relative">
+              <div class="phead">Context<span class="r"><span>live</span></span></div>
+              <div class="pbody">
+                <div class="ladder">
+                  <div class="lr pin"><span class="n">1</span><span class="l">System + workspace map</span>
+                    <span class="tk">980</span><span class="pill p-mute">pinned</span></div>
+                  <div class="lr"><span class="n">2</span><span class="l">Conversation &#183; 12 turns</span>
+                    <span class="tk">4,210</span></div>
+                  <div class="lr"><span class="n">3</span><span class="l">@ src/mw/auth.ts</span>
+                    <span class="tk">1,120</span><span class="pill p-mute">attached</span></div>
+                  <div class="lr"><span class="n">4</span><span class="l">T3 retrieved &#183; 4 chunks</span>
+                    <span class="tk">2,640</span></div>
+                  <div class="lr untrusted"><span class="n">5</span>
+                    <span class="l">&#9888; Tool results &#183; fenced</span><span class="tk">3,450</span></div>
+                  <div class="tot"><span>12,400 / 196,608</span>
+                    <span class="v">qwen3.6:35b</span></div>
+                  <div class="meter"><i style="width:6.3%"></i></div>
+                </div>
+
+                <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+                  text-transform:uppercase;color:var(--ink-3);margin:18px 0 9px">Pick a model</div>
+                <div style="border:1px solid var(--line-2);border-radius:var(--r);
+                  background:var(--s2);overflow:hidden">
+                  <div class="dh2">Local &#183; resident</div>
+                  <div class="di on"><span>&#9679;</span><span>qwen3.6:35b</span>
+                    <span class="r2">ollama &#183; 41 t/s</span></div>
+                  <div class="di"><span class="mo">&#9679;</span><span>granite4:3.4b</span>
+                    <span class="r2">ollama &#183; 156 t/s</span></div>
+                  <div class="sep"></div>
+                  <div class="dh2">Local &#183; cold <span style="text-transform:none;
+                    letter-spacing:0">(loads on first use)</span></div>
+                  <div class="di"><span class="sl">&#9675;</span><span>qwen3.6-27b</span>
+                    <span class="r2">lmstudio &#183; 17.1 GB</span></div>
+                  <div class="di"><span class="sl">&#9675;</span><span>gemma-4-31b</span>
+                    <span class="r2">lmstudio &#183; 19.8 GB</span></div>
+                  <div class="di"><span class="sl">&#9675;</span><span>gemma4:8b</span>
+                    <span class="r2">ollama &#183; 5.4 GB</span></div>
+                  <div class="sep"></div>
+                  <div class="dh2">Cloud</div>
+                  <div class="di dim" style="opacity:.5"><span class="wh">&#9888;</span>
+                    <span>disabled</span><span class="r2">local-only mode</span></div>
+                </div>
+                <p style="font-size:12px;color:var(--ink-3);margin-top:11px;line-height:1.5">
+                  Picking a model here overrides the router for this conversation only. Runs still
+                  route per node.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="strip">
+            <span class="seg2"><span style="width:6px;height:6px;border-radius:50%;
+              background:var(--moss);display:block"></span><b>daemon</b> :51733</span>
+            <span class="seg2"><b>chat</b> qwen3.6:35b &#183; ollama</span>
+            <span class="seg2"><b>vram</b><span class="vram"><i style="width:77%"></i></span>
+              <span class="num">24.6 / 32.0 GB</span></span>
+            <span class="seg2"><b>ctx</b> <span class="num">12,400</span></span>
+            <span class="seg2 last"><b>cost</b> <span class="num">$0.00</span> local-only</span>
+          </div>
+        </div>
+      </div>
+      <p class="caption">Chat &#8212; the plan arrives inline as a card; approving it spawns the run graph</p>
+    </div>
+
+    <!-- ---------- FILES ---------- -->
+    <div class="viewwrap" id="v-files" hidden>
+      <div class="scroller">
+        <div class="app" style="height:620px">
+          <div class="titlebar">
+            <div class="ws"><span class="dot"></span><span>api-svc</span>
+              <span class="path">~/projects/api-svc</span>
+              <span style="color:var(--ember);font-size:9px">&#9662;</span></div>
+            <div class="tb-center"><span class="pill p-run">&#9654; running</span>
+              <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">run 4f2a</span></div>
+            <div class="wctl"><i>&#8212;</i><i>&#9634;</i><i>&#10005;</i></div>
+          </div>
+          <div class="body">
+            <div class="rail" data-active="files"></div>
+
+            <div class="col left" style="width:300px">
+              <div class="phead">Project<span class="r"><span>1,204 files</span></span></div>
+              <div class="pbody">
+                <div class="fsearch"><span class="dim">&#8981;</span><span>filter&#8230;</span></div>
+                <div class="ftree">
+                  <div class="fr"><span class="dim">&#9662;</span><span class="nm dir">src</span></div>
+                  <div class="fr" style="padding-left:18px"><span class="dim">&#9662;</span>
+                    <span class="nm dir">mw</span><span class="tw sl">&#128274; n2</span></div>
+                  <div class="fr on" style="padding-left:32px"><span class="nm">rateLimit.ts</span>
+                    <span class="tw em">&#9654;</span><span class="tw mo">+84</span></div>
+                  <div class="fr" style="padding-left:32px"><span class="nm">index.ts</span>
+                    <span class="tw sl">&#128274;</span></div>
+                  <div class="fr" style="padding-left:32px"><span class="nm">auth.ts</span></div>
+                  <div class="fr" style="padding-left:32px"><span class="nm">cors.ts</span></div>
+                  <div class="fr" style="padding-left:18px"><span class="dim">&#9662;</span>
+                    <span class="nm dir">routes</span></div>
+                  <div class="fr" style="padding-left:32px"><span class="nm">upload.ts</span></div>
+                  <div class="fr" style="padding-left:32px"><span class="nm">health.ts</span></div>
+                  <div class="fr"><span class="dim">&#9662;</span><span class="nm dir">test</span></div>
+                  <div class="fr" style="padding-left:18px"><span class="nm">rateLimit.spec.ts</span>
+                    <span class="tw em">&#9654;</span><span class="tw mo">+112</span></div>
+                  <div class="fr" style="padding-left:18px"><span class="nm">upload.spec.ts</span></div>
+                  <div class="fr dim"><span class="dim">&#9656;</span><span class="nm dir">node_modules</span>
+                    <span class="tw">not indexed</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col center">
+              <div class="phead">src/mw/rateLimit.ts
+                <span class="r"><span class="pill p-run">&#9654; n2 writing</span>
+                  <span>read-only while locked</span></span></div>
+              <div class="pbody flush">
+                <div style="font-family:var(--mono);font-size:11.5px;line-height:1.7;padding:12px 0">
+                  <div class="dl"><span class="ln">1</span><span class="tx"><span class="kw">import</span> { createHash } <span class="kw">from</span> <span class="str">'crypto'</span>;</span></div>
+                  <div class="dl"><span class="ln">2</span><span class="tx"></span></div>
+                  <div class="dl"><span class="ln">3</span><span class="tx"><span class="cmt">/** Token bucket, 100 req/min per key. */</span></span></div>
+                  <div class="dl"><span class="ln">4</span><span class="tx"><span class="kw">export class</span> RateLimiter {</span></div>
+                  <div class="dl"><span class="ln">5</span><span class="tx">  <span class="kw">private</span> buckets = <span class="kw">new</span> Map&lt;string, Bucket&gt;();</span></div>
+                  <div class="dl"><span class="ln">6</span><span class="tx"></span></div>
+                  <div class="dl"><span class="ln">7</span><span class="tx">  take(key: string): Verdict {</span></div>
+                  <div class="dl"><span class="ln">8</span><span class="tx">    <span class="kw">const</span> b = <span class="kw">this</span>.refill(key);</span></div>
+                  <div class="dl add"><span class="ln">9</span><span class="tx">    <span class="kw">if</span> (b.tokens &lt; 1) {<span class="em"> &#9612;</span></span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col right" style="width:320px">
+              <div class="phead">File state</div>
+              <div class="pbody">
+                <div style="font-family:var(--mono);font-size:11px;color:var(--ink-2)">
+                  <div class="specrow"><b>git</b><span class="mo">untracked</span></div>
+                  <div class="specrow"><b>agent</b><span class="em">n2 write set</span></div>
+                  <div class="specrow"><b>lock</b><span class="sl">held by n2</span></div>
+                  <div class="specrow"><b>indexed</b><span>12 chunks &#183; fresh</span></div>
+                  <div class="specrow"><b>epoch</b><span>4</span></div>
+                  <div class="specrow"><b>checkpoint</b><span>seq 813</span></div>
+                </div>
+
+                <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+                  text-transform:uppercase;color:var(--ink-3);margin:18px 0 9px">Actions</div>
+                <div style="display:flex;flex-direction:column;gap:6px">
+                  <span class="btn" style="text-align:left">Attach to conversation &nbsp;<span class="dim">@</span></span>
+                  <span class="btn" style="text-align:left">Show retrieved chunks</span>
+                  <span class="btn" style="text-align:left">Exclude from index</span>
+                  <span class="btn danger" style="text-align:left">Roll back to checkpoint</span>
+                </div>
+
+                <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+                  text-transform:uppercase;color:var(--ink-3);margin:20px 0 9px">Index coverage</div>
+                <div class="meter" style="height:6px"><i style="width:63%;background:var(--moss)"></i></div>
+                <div style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3);margin-top:8px">
+                  4,812 chunks &#183; 763 of 1,204 files<br>node_modules and dist excluded</div>
+                <p style="font-size:12px;color:var(--ink-3);margin-top:14px;line-height:1.5">
+                  The tree shows agent state, not just git state &#8212; locks, write sets, and index
+                  coverage are things only this app knows.</p>
+              </div>
+            </div>
+          </div>
+          <div class="strip">
+            <span class="seg2"><b>workspace</b> api-svc &#183; 1,204 files</span>
+            <span class="seg2"><b>index</b> 4,812 chunks &#183; fresh</span>
+            <span class="seg2"><b>locked</b> <span class="num">2</span> paths</span>
+            <span class="seg2 last"><b>branch</b> feature/rate-limit</span>
+          </div>
+        </div>
+      </div>
+      <p class="caption">Files &#8212; a tree that shows locks, write sets, and index coverage, not just git status</p>
+    </div>
+
+    <!-- ---------- RUN ---------- -->
+    <div class="viewwrap" id="v-run" hidden>
+      <div class="scroller">
+        <div class="app">
+          <div class="titlebar">
+            <div class="ws"><span class="dot"></span><span>api-svc</span>
+              <span class="path">~/projects/api-svc</span>
+              <span style="color:var(--ember);font-size:9px">&#9662;</span></div>
+            <div class="tb-center">
+              <span class="pill p-run">&#9654; running</span>
+              <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">run 4f2a &#183; node 2 of 6</span>
+            </div>
+            <div class="wctl"><i>&#8212;</i><i>&#9634;</i><i>&#10005;</i></div>
+          </div>
+
+          <div class="body">
+            <div class="rail" data-active="session"></div>
+
+            <!-- left -->
+            <div class="col left" style="width:240px">
+              <div class="phead">Files<span class="r"><span>2 locked</span></span></div>
+              <div class="pbody">
+                <div class="fsearch"><span class="dim">&#8981;</span><span>filter&#8230;</span></div>
+                <div class="ftree">
+                  <div class="fr"><span class="dim">&#9662;</span><span class="nm dir">src</span></div>
+                  <div class="fr" style="padding-left:18px"><span class="dim">&#9662;</span>
+                    <span class="nm dir">mw</span><span class="tw sl">&#128274; n2</span></div>
+                  <div class="fr on" style="padding-left:32px"><span class="nm">rateLimit.ts</span>
+                    <span class="tw em">&#9654;</span></div>
+                  <div class="fr" style="padding-left:32px"><span class="nm">index.ts</span>
+                    <span class="tw sl">&#128274;</span></div>
+                  <div class="fr" style="padding-left:32px"><span class="nm">auth.ts</span></div>
+                  <div class="fr" style="padding-left:18px"><span class="dim">&#9656;</span>
+                    <span class="nm dir">routes</span></div>
+                  <div class="fr"><span class="dim">&#9662;</span><span class="nm dir">test</span></div>
+                  <div class="fr" style="padding-left:18px"><span class="nm">rateLimit.spec.ts</span>
+                    <span class="tw em">&#9654;</span></div>
+                  <div class="fr" style="padding-left:18px"><span class="nm">upload.spec.ts</span></div>
+                  <div class="fr dim"><span class="dim">&#9656;</span><span class="nm dir">node_modules</span></div>
+                </div>
+
+                <div class="phead" style="margin:14px -12px 0;border-top:1px solid var(--line)">Acceptance</div>
+                <div style="font-size:12.5px;color:var(--ink-2);padding-top:10px;display:flex;flex-direction:column;gap:7px">
+                  <div style="display:flex;gap:8px"><span class="glyph" style="color:var(--moss)">&#10003;</span>
+                    <span>Bucket limiter, 100 req/min per key</span></div>
+                  <div style="display:flex;gap:8px"><span class="glyph" style="color:var(--ember)">&#9654;</span>
+                    <span>429 with <code style="font-size:11px">Retry-After</code> header</span></div>
+                  <div style="display:flex;gap:8px"><span class="glyph" style="color:var(--slate)">&#9675;</span>
+                    <span>Existing upload tests still pass</span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- center -->
+            <div class="col center">
+              <div class="phead">Session
+                <span class="r">
+                  <span class="segbtn"><span>thread</span><span class="on">graph</span></span>
+                  <span>6 nodes</span><span>2 parallel</span><span>1 blocked</span></span></div>
+              <div class="pbody flush">
+                <div class="canvas">
+                  <div class="inner">
+                    <svg class="edges" viewBox="0 0 468 372">
+                      <path class="edge hot" d="M242 76 C242 92, 116 88, 116 104"/>
+                      <path class="edge hot" d="M242 76 C242 92, 368 88, 368 104"/>
+                      <path class="edge blocked" d="M116 168 C116 180, 116 184, 116 196"/>
+                      <path class="edge" d="M368 168 C368 180, 368 184, 368 196"/>
+                      <path class="edge" d="M116 260 C116 276, 242 272, 242 288"/>
+                      <path class="edge" d="M368 260 C368 276, 242 272, 242 288"/>
+                    </svg>
+
+                    <div class="node st-done" style="left:142px;top:12px">
+                      <div class="top"><span class="glyph">&#10003;</span><span class="id">n1</span>
+                        <span class="ttl">read middleware config</span></div>
+                      <div class="ws">read &#9656; src/mw/**</div>
+                      <div class="meta"><span class="mdl">granite4:3.4b</span><span class="t">1.2s</span></div>
+                    </div>
+
+                    <div class="node st-run" style="left:16px;top:104px">
+                      <div class="top"><span class="glyph">&#9654;</span><span class="id">n2</span>
+                        <span class="ttl">implement limiter</span></div>
+                      <div class="ws">write &#9656; src/mw/rateLimit.ts</div>
+                      <div class="meta"><span class="mdl">qwen3.6:35b</span><span class="t">14.1s</span></div>
+                    </div>
+
+                    <div class="node st-run" style="left:268px;top:104px">
+                      <div class="top"><span class="glyph">&#9654;</span><span class="id">n3</span>
+                        <span class="ttl">add limiter tests</span></div>
+                      <div class="ws">write &#9656; test/rateLimit.spec.ts</div>
+                      <div class="meta"><span class="mdl">qwen3.6-27b</span><span class="t">9.7s</span></div>
+                    </div>
+
+                    <div class="node st-block" style="left:16px;top:196px">
+                      <div class="top"><span class="glyph">&#128274;</span><span class="id">n4</span>
+                        <span class="ttl">wire into router</span></div>
+                      <div class="ws">blocked &#183; write set held by n2</div>
+                      <div class="meta"><span class="mdl">queued</span><span class="t">&#8212;</span></div>
+                    </div>
+
+                    <div class="node st-fail" style="left:268px;top:196px">
+                      <div class="top"><span class="glyph">&#10007;</span><span class="id">n5</span>
+                        <span class="ttl">benchmark throughput</span></div>
+                      <div class="ws">gate: unit &#10007; &#183; retry 1 of 2</div>
+                      <div class="meta"><span class="mdl">gemma4:8b</span><span class="t">6.4s</span></div>
+                    </div>
+
+                    <div class="node st-appr" style="left:142px;top:288px">
+                      <div class="top"><span class="glyph">&#9888;</span><span class="id">n6</span>
+                        <span class="ttl">push branch</span></div>
+                      <div class="ws">irreversible &#183; needs approval</div>
+                      <div class="meta"><span class="mdl">&#8212;</span><span class="t">held</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- right -->
+            <div class="col right">
+              <div class="phead">Node n2 &#183; implement limiter
+                <span class="r"><span class="pill p-run">&#9654; running</span></span></div>
+              <div class="dtabs"><span class="on">Context</span><span>Model</span><span>Tools</span>
+                <span>Gates</span><span>Diff</span></div>
+              <div class="pbody">
+                <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+                  text-transform:uppercase;color:var(--ink-3);margin-bottom:8px">
+                  Assembled window &#183; priority ladder</div>
+                <div class="ladder">
+                  <div class="lr pin"><span class="n">1</span><span class="l">System + persona contract</span>
+                    <span class="tk">1,204</span><span class="pill p-mute">pinned</span></div>
+                  <div class="lr pin"><span class="n">2</span><span class="l">Node contract &amp; write set</span>
+                    <span class="tk">486</span><span class="pill p-mute">pinned</span></div>
+                  <div class="lr"><span class="n">3</span><span class="l">Critique constraints &#183; round 1</span>
+                    <span class="tk">312</span></div>
+                  <div class="lr"><span class="n">4</span><span class="l">Confirmed lessons (2)</span>
+                    <span class="tk">198</span></div>
+                  <div class="lr"><span class="n">5</span><span class="l">T2 delta from n1</span>
+                    <span class="tk">744</span></div>
+                  <div class="lr"><span class="n">6</span><span class="l">T3 retrieved &#183; 5 chunks</span>
+                    <span class="tk">3,120</span></div>
+                  <div class="lr untrusted"><span class="n">7</span><span class="l">&#9888; Tool results &#183; fenced</span>
+                    <span class="tk">2,880</span></div>
+                  <div class="lr evict"><span class="n">8</span><span class="l">Raw turns</span>
+                    <span class="tk">3,456</span><span class="pill p-mute">evictable</span></div>
+                  <div class="tot"><span>12,400 / 196,608</span><span class="v">25% headroom held</span></div>
+                  <div class="meter"><i style="width:6.3%"></i></div>
+                </div>
+
+                <div class="approval">
+                  <div class="hd"><span>&#9888;</span><span>Approval required &#183; n6</span></div>
+                  <div class="cmd">git push origin feature/rate-limit</div>
+                  <div class="why">Irreversible. Node contract declares a remote publish;
+                    plan approval does not cover it.</div>
+                  <div class="btnrow">
+                    <span class="btn primary">Approve once</span>
+                    <span class="btn">Approve for run</span>
+                    <span class="btn danger">Reject</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="strip">
+            <span class="seg2"><span class="dot" style="width:6px;height:6px;border-radius:50%;background:var(--moss);display:block"></span><b>daemon</b> :51733</span>
+            <span class="seg2"><b>routing</b> qwen3.6:35b &#183; ollama</span>
+            <span class="seg2"><b>vram</b><span class="vram"><i style="width:77%"></i></span><span class="num">24.6 / 32.0 GB</span></span>
+            <span class="seg2"><b>tokens</b> <span class="num">18,240</span></span>
+            <span class="seg2"><b>cost</b> <span class="num">$0.00</span> local-only</span>
+            <span class="seg2 last"><span class="num">00:41</span> <span class="pill p-fail">esc  cancel</span></span>
+          </div>
+        </div>
+      </div>
+      <p class="caption">Run view &#8212; 1240 &#215; 812 &#183; left 300 / canvas flex / drawer 380</p>
+    </div>
+
+    <!-- ---------- MODELS ---------- -->
+    <div class="viewwrap" id="v-models" hidden>
+      <div class="scroller">
+        <div class="app">
+          <div class="titlebar">
+            <div class="ws"><span class="dot"></span><span>api-svc</span>
+              <span class="path">~/projects/api-svc</span></div>
+            <div class="tb-center"><span class="pill p-mute">idle</span></div>
+            <div class="wctl"><i>&#8212;</i><i>&#9634;</i><i>&#10005;</i></div>
+          </div>
+          <div class="body">
+            <div class="rail" data-active="models"></div>
+
+            <div class="col left">
+              <div class="phead">Providers<span class="r"><span>4</span></span></div>
+              <div class="pbody">
+                <div class="provcard">
+                  <div class="ph"><span class="chipdot" style="background:var(--moss);margin:0"></span>
+                    <span class="pn">ollama</span><span class="pill p-done" style="margin-left:auto">up 12ms</span></div>
+                  <div class="pm"><span>:11434 &#183; local</span><span>4 models &#183; 2 slots</span></div>
+                </div>
+                <div class="provcard">
+                  <div class="ph"><span class="chipdot" style="background:var(--moss);margin:0"></span>
+                    <span class="pn">lmstudio</span><span class="pill p-done" style="margin-left:auto">up 8ms</span></div>
+                  <div class="pm"><span>:1234 &#183; local</span><span>3 models &#183; 1 slot</span></div>
+                </div>
+                <div class="provcard">
+                  <div class="ph"><span class="chipdot" style="background:var(--slate);margin:0"></span>
+                    <span class="pn">llama.cpp</span><span class="pill p-block" style="margin-left:auto">stopped</span></div>
+                  <div class="pm"><span>managed &#183; GBNF</span><span>start to enable</span></div>
+                </div>
+                <div class="provcard">
+                  <div class="ph"><span class="chipdot" style="background:var(--wheat);margin:0"></span>
+                    <span class="pn">anthropic</span><span class="pill p-appr" style="margin-left:auto">no key</span></div>
+                  <div class="pm"><span>cloud</span><span>add in settings</span></div>
+                </div>
+
+                <div class="phead" style="margin:14px -12px 0;border-top:1px solid var(--line)">
+                  Resident<span class="r"><span>24.6 / 32.0 GB</span></span></div>
+                <div style="padding-top:10px">
+                  <div class="meter" style="height:6px"><i style="width:77%"></i></div>
+                  <div style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3);
+                    display:flex;flex-direction:column;gap:5px;margin-top:10px">
+                    <div style="display:flex"><span>qwen3.6:35b</span><span style="margin-left:auto;color:var(--ink-2)">22.3 GB</span></div>
+                    <div style="display:flex"><span>nomic-embed-v1.5</span><span style="margin-left:auto;color:var(--ink-2)">0.3 GB</span></div>
+                    <div style="display:flex"><span>granite4:3.4b</span><span style="margin-left:auto;color:var(--ink-2)">2.0 GB</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col center" style="flex:1">
+              <div class="phead">Installed models
+                <span class="r"><span>ctx shown as probed / advertised</span>
+                  <span style="color:var(--ember)">probe all</span></span></div>
+              <div class="pbody">
+                <table class="dt">
+                  <thead><tr><th>Model</th><th>Provider</th><th>State</th><th>Ctx</th>
+                    <th>Quant</th><th class="r">VRAM</th><th>Tools</th><th>Struct</th>
+                    <th class="r">tok/s</th><th>Reliability</th></tr></thead>
+                  <tbody>
+                    <tr><td class="name">qwen3.6:35b</td><td>ollama</td>
+                      <td><span class="pill p-run">resident</span></td><td>131k / 262k</td><td>Q4_K_M</td>
+                      <td class="r">22.3 GB</td><td><span class="mo">native</span></td><td>schema</td>
+                      <td class="r">41</td><td><span class="bar"><i style="width:94%;background:var(--moss)"></i></span>0.94</td></tr>
+                    <tr><td class="name">qwen3.6-27b</td><td>lmstudio</td>
+                      <td><span class="pill p-block">cold</span></td><td>128k / 128k</td><td>Q4_K_M</td>
+                      <td class="r">17.1 GB</td><td><span class="mo">native</span></td><td>schema</td>
+                      <td class="r">52</td><td><span class="bar"><i style="width:91%;background:var(--moss)"></i></span>0.91</td></tr>
+                    <tr><td class="name">gemma-4-31b</td><td>lmstudio</td>
+                      <td><span class="pill p-block">cold</span></td><td>128k / 128k</td><td>Q4_0</td>
+                      <td class="r">19.8 GB</td><td><span class="mo">native</span></td><td>schema</td>
+                      <td class="r">&#8212;</td><td><span class="bar"><i style="width:87%;background:var(--moss)"></i></span>0.87</td></tr>
+                    <tr><td class="name">gemma4:8b</td><td>ollama</td>
+                      <td><span class="pill p-block">cold</span></td><td>128k / 128k</td><td>Q4_K_M</td>
+                      <td class="r">5.4 GB</td><td><span class="mo">native</span></td><td>schema</td>
+                      <td class="r">88</td><td><span class="bar"><i style="width:81%;background:var(--moss)"></i></span>0.81</td></tr>
+                    <tr><td class="name">granite4:3.4b</td><td>ollama</td>
+                      <td><span class="pill p-run">resident</span></td><td>131k / 131k</td><td>Q4_K_M</td>
+                      <td class="r">2.0 GB</td><td><span class="mo">native</span></td><td>schema</td>
+                      <td class="r">156</td><td><span class="bar"><i style="width:72%;background:var(--wheat)"></i></span>0.72</td></tr>
+                    <tr><td class="name">qwen3.5:0.8b</td><td>ollama</td>
+                      <td><span class="pill p-block">cold</span></td><td class="cr">32k / 262k</td><td>Q8_0</td>
+                      <td class="r">0.9 GB</td><td><span class="wh">shim</span></td><td>schema</td>
+                      <td class="r">310</td><td><span class="bar"><i style="width:44%;background:var(--crimson)"></i></span>0.44</td></tr>
+                    <tr><td class="name">nomic-embed-v1.5</td><td>lmstudio</td>
+                      <td><span class="pill p-run">resident</span></td><td>8k / 8k</td><td>F16</td>
+                      <td class="r">0.3 GB</td><td>&#8212;</td><td>&#8212;</td><td class="r">&#8212;</td>
+                      <td><span class="pill p-done">embed &#183; 768d</span></td></tr>
+                    <tr><td class="name">qwen3.6-coder.gguf</td><td>llama.cpp</td>
+                      <td><span class="pill p-block">not started</span></td><td>&#8212; / 128k</td><td>Q5_K_M</td>
+                      <td class="r">14.2 GB</td><td><span class="mo">native</span></td>
+                      <td><span class="em">grammar</span></td><td class="r">&#8212;</td><td>unprobed</td></tr>
+                  </tbody>
+                </table>
+                <p style="font-size:12px;color:var(--ink-3);font-family:var(--mono);margin-top:14px">
+                  qwen3.5:0.8b advertises 262k but failed needle retrieval past 32k &#8212; router uses the
+                  probed value.</p>
+              </div>
+            </div>
+
+            <div class="col right">
+              <div class="phead">Routing simulator</div>
+              <div class="pbody">
+                <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+                  text-transform:uppercase;color:var(--ink-3);margin-bottom:8px">Requirement</div>
+                <div style="border:1px solid var(--line-2);border-radius:var(--r);background:var(--s2);
+                  padding:10px;font-family:var(--mono);font-size:11px;color:var(--ink-2);
+                  display:flex;flex-direction:column;gap:4px">
+                  <div>purpose &nbsp;<span class="b">code</span></div>
+                  <div>tools &nbsp;&nbsp;&nbsp;<span class="b">required</span></div>
+                  <div>minCtx &nbsp;&nbsp;<span class="b">48,000</span></div>
+                  <div>quality &nbsp;<span class="b">standard</span></div>
+                  <div>privacy &nbsp;<span class="em">local-only</span></div>
+                </div>
+
+                <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+                  text-transform:uppercase;color:var(--ink-3);margin:16px 0 8px">Ranked candidates</div>
+                <div style="font-family:var(--mono);font-size:11px;display:flex;flex-direction:column;gap:0">
+                  <div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)">
+                    <span class="em">1</span><span class="b" style="flex:1">qwen3.6:35b</span>
+                    <span class="em">0.91</span></div>
+                  <div class="dim" style="padding:0 0 7px 18px;font-size:10.5px;border-bottom:1px solid var(--line)">
+                    resident +0.20 &#183; reliability 0.94 &#183; 41 t/s</div>
+                  <div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)">
+                    <span class="dim">2</span><span style="flex:1;color:var(--ink-2)">qwen3.6-27b</span>
+                    <span class="dim">0.68</span></div>
+                  <div class="dim" style="padding:0 0 7px 18px;font-size:10.5px;border-bottom:1px solid var(--line)">
+                    cold, 17.1 GB load &#183; would evict 35b</div>
+                  <div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)">
+                    <span class="dim">3</span><span style="flex:1;color:var(--ink-2)">gemma4:8b</span>
+                    <span class="dim">0.55</span></div>
+                </div>
+
+                <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+                  text-transform:uppercase;color:var(--ink-3);margin:16px 0 8px">Excluded</div>
+                <div style="font-family:var(--mono);font-size:11px;color:var(--ink-3);
+                  display:flex;flex-direction:column;gap:6px">
+                  <div><span class="cr">&#10007;</span> qwen3.5:0.8b &#8212; probed ctx 32k &lt; 48k</div>
+                  <div><span class="cr">&#10007;</span> claude-opus &#8212; privacy is local-only</div>
+                  <div><span class="cr">&#10007;</span> nomic-embed &#8212; no tool support</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="strip">
+            <span class="seg2"><span style="width:6px;height:6px;border-radius:50%;background:var(--moss);display:block"></span><b>daemon</b> :51733</span>
+            <span class="seg2"><b>3 resident</b> &#183; 5 cold</span>
+            <span class="seg2"><b>vram</b><span class="vram"><i style="width:77%"></i></span><span class="num">24.6 / 32.0 GB</span></span>
+            <span class="seg2 last"><b>last probe</b> <span class="num">2h ago</span></span>
+          </div>
+        </div>
+      </div>
+      <p class="caption">Model manager &#8212; probed capability is authoritative, never the advertised value</p>
+    </div>
+
+    <!-- ---------- DIFF ---------- -->
+    <div class="viewwrap" id="v-diff" hidden>
+      <div class="scroller">
+        <div class="app" style="height:640px">
+          <div class="titlebar">
+            <div class="ws"><span class="dot"></span><span>api-svc</span>
+              <span class="path">~/projects/api-svc</span></div>
+            <div class="tb-center"><span class="pill p-appr">&#9888; 3 files awaiting review</span></div>
+            <div class="wctl"><i>&#8212;</i><i>&#9634;</i><i>&#10005;</i></div>
+          </div>
+          <div class="body">
+            <div class="rail" data-active="diff"></div>
+
+            <div class="col left" style="width:250px">
+              <div class="phead">Changes by node</div>
+              <div class="pbody">
+                <div class="difftree">
+                  <div class="grp">n2 &#183; implement limiter</div>
+                  <div class="f on"><span class="em">&#9656;</span><span>src/mw/rateLimit.ts</span>
+                    <span class="ad">+84</span><span class="rm">&#8722;0</span></div>
+                  <div class="f"><span class="dim">&#9656;</span><span>src/mw/index.ts</span>
+                    <span class="ad">+3</span><span class="rm">&#8722;1</span></div>
+                  <div class="grp">n3 &#183; add limiter tests</div>
+                  <div class="f"><span class="dim">&#9656;</span><span>test/rateLimit.spec.ts</span>
+                    <span class="ad">+112</span><span class="rm">&#8722;0</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col center">
+              <div class="phead">src/mw/rateLimit.ts
+                <span class="r"><span class="pill p-done">gates 6/6</span>
+                  <span class="pill p-appr">reviewer: 1 note</span></span></div>
+              <div class="pbody flush">
+                <div class="diffpane">
+                  <div>
+                    <div class="dl hunk"><span class="ln"></span><span class="tx"> @@ new file @@</span></div>
+                    <div class="dl"><span class="ln"></span><span class="tx"></span></div>
+                    <div class="dl"><span class="ln"></span><span class="tx"></span></div>
+                    <div class="dl"><span class="ln"></span><span class="tx"></span></div>
+                    <div class="dl"><span class="ln"></span><span class="tx"></span></div>
+                    <div class="dl"><span class="ln"></span><span class="tx"></span></div>
+                    <div class="dl"><span class="ln"></span><span class="tx"></span></div>
+                    <div class="dl"><span class="ln"></span><span class="tx"></span></div>
+                    <div class="dl"><span class="ln"></span><span class="tx"></span></div>
+                    <div class="dl"><span class="ln"></span><span class="tx"></span></div>
+                    <div class="dl"><span class="ln"></span><span class="tx"></span></div>
+                    <div class="dl"><span class="ln"></span><span class="tx"></span></div>
+                  </div>
+                  <div>
+                    <div class="dl hunk"><span class="ln"></span><span class="tx"> @@ +1,84 @@</span></div>
+                    <div class="dl add"><span class="ln">1</span><span class="tx"><span class="kw">import</span> { createHash } <span class="kw">from</span> <span class="str">'crypto'</span>;</span></div>
+                    <div class="dl add"><span class="ln">2</span><span class="tx"></span></div>
+                    <div class="dl add"><span class="ln">3</span><span class="tx"><span class="cmt">/** Token bucket, 100 req/min per key. */</span></span></div>
+                    <div class="dl add"><span class="ln">4</span><span class="tx"><span class="kw">export class</span> RateLimiter {</span></div>
+                    <div class="dl add"><span class="ln">5</span><span class="tx">  <span class="kw">private</span> buckets = <span class="kw">new</span> Map&lt;string, Bucket&gt;();</span></div>
+                    <div class="dl add"><span class="ln">6</span><span class="tx"></span></div>
+                    <div class="dl add"><span class="ln">7</span><span class="tx">  take(key: string): Verdict {</span></div>
+                    <div class="dl add"><span class="ln">8</span><span class="tx">    <span class="kw">const</span> b = <span class="kw">this</span>.refill(key);</span></div>
+                    <div class="dl add"><span class="ln">9</span><span class="tx">    <span class="kw">if</span> (b.tokens &lt; 1) {</span></div>
+                    <div class="dl add"><span class="ln">10</span><span class="tx">      <span class="kw">return</span> { ok: <span class="kw">false</span>, retryAfter: b.nextMs };</span></div>
+                    <div class="dl add"><span class="ln">11</span><span class="tx">    }</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col right" style="width:320px">
+              <div class="phead">Reviewer note<span class="r"><span>round 1 of 3</span></span></div>
+              <div class="pbody">
+                <div style="border-left:2px solid var(--wheat);background:var(--wheat-dim);
+                  padding:10px 11px;border-radius:0 var(--r) var(--r) 0;font-size:12.5px;
+                  color:var(--ink-2);line-height:1.55">
+                  <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+                    text-transform:uppercase;color:var(--wheat);margin-bottom:6px">gemma-4-31b &#183; line 5</div>
+                  The bucket map is unbounded &#8212; a distinct key per request leaks memory.
+                  Acceptance criteria do not cover eviction, but this violates the persona
+                  contract's resource-safety clause.
+                </div>
+
+                <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+                  text-transform:uppercase;color:var(--ink-3);margin:18px 0 8px">Your critique</div>
+                <div style="border:1px solid var(--line-2);border-radius:var(--r);background:var(--s2);
+                  padding:9px;font-size:12.5px;line-height:1.5;min-height:66px;color:var(--ink)">
+                  Agreed &#8212; add an LRU cap of 10k keys.<span class="cursor" style="height:13px"></span>
+                </div>
+                <div class="btnrow" style="margin-top:9px">
+                  <span class="btn danger">Reject hunk &#8594; re-run n2</span>
+                  <span class="btn">Accept anyway</span>
+                </div>
+                <p style="font-size:12px;color:var(--ink-3);margin-top:12px;line-height:1.5">
+                  Rejecting attaches your note as a hard constraint and re-runs the node.
+                  Two rounds remain before it escalates.</p>
+
+                <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+                  text-transform:uppercase;color:var(--ink-3);margin:20px 0 8px">Gate vector</div>
+                <div style="font-family:var(--mono);font-size:11px;display:flex;flex-direction:column;gap:5px">
+                  <div><span class="mo">&#10003;</span> build &nbsp;&nbsp;<span class="dim">2.1s</span></div>
+                  <div><span class="mo">&#10003;</span> typecheck <span class="dim">3.4s</span></div>
+                  <div><span class="mo">&#10003;</span> lint &nbsp;&nbsp;&nbsp;<span class="dim">0.9s</span></div>
+                  <div><span class="mo">&#10003;</span> unit &nbsp;&nbsp;&nbsp;<span class="dim">18 passed</span></div>
+                  <div><span class="mo">&#10003;</span> contract <span class="dim">3/3 criteria</span></div>
+                  <div><span class="mo">&#10003;</span> secrets &nbsp;<span class="dim">clean</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="strip">
+            <span class="seg2"><b>reviewing</b> node n2 &#183; 1 of 3 files</span>
+            <span class="seg2"><b>reviewer</b> gemma-4-31b <span class="dim">&#8800; coder family</span></span>
+            <span class="seg2 last"><span class="pill p-done">a  accept all</span>
+              <span class="pill p-fail">r  reject hunk</span></span>
+          </div>
+        </div>
+      </div>
+      <p class="caption">Diff review &#8212; rejecting a hunk feeds the critique loop, capped at 3 rounds</p>
+    </div>
+
+    <!-- ---------- TIMELINE ---------- -->
+    <div class="viewwrap" id="v-time" hidden>
+      <div class="scroller">
+        <div class="app" style="height:560px">
+          <div class="titlebar">
+            <div class="ws"><span class="dot"></span><span>api-svc</span>
+              <span class="path">~/projects/api-svc</span></div>
+            <div class="tb-center"><span class="pill p-mute">run 4f2a &#183; replay at 00:26.4</span></div>
+            <div class="wctl"><i>&#8212;</i><i>&#9634;</i><i>&#10005;</i></div>
+          </div>
+          <div class="body">
+            <div class="rail" data-active="time"></div>
+
+            <div class="col center">
+              <div class="phead">Event lanes
+                <span class="r"><span>1,284 events</span><span style="color:var(--ember)">&#9664; &#9654; scrub</span></span></div>
+              <div class="pbody flush">
+                <div class="lanes" style="position:relative">
+                  <div class="playhead" style="left:calc(84px + 46%)"></div>
+                  <div class="lane"><span class="lname">node</span><div class="track">
+                    <span class="ev" style="left:2%;width:9%;background:var(--moss)"></span>
+                    <span class="ev" style="left:12%;width:34%;background:var(--ember)"></span>
+                    <span class="ev" style="left:14%;width:26%;background:var(--ember);opacity:.55"></span>
+                    <span class="ev" style="left:48%;width:14%;background:var(--crimson)"></span>
+                    <span class="ev" style="left:64%;width:8%;background:var(--slate)"></span>
+                  </div></div>
+                  <div class="lane"><span class="lname">model</span><div class="track">
+                    <span class="ev" style="left:3%;width:5%;background:var(--slate)"></span>
+                    <span class="ev" style="left:13%;width:30%;background:var(--ember)"></span>
+                    <span class="ev" style="left:49%;width:11%;background:var(--ember);opacity:.55"></span>
+                  </div></div>
+                  <div class="lane"><span class="lname">tool</span><div class="track">
+                    <span class="ev" style="left:4%;width:1.5%;background:var(--slate)"></span>
+                    <span class="ev" style="left:8%;width:1.5%;background:var(--slate)"></span>
+                    <span class="ev" style="left:22%;width:1.5%;background:var(--moss)"></span>
+                    <span class="ev" style="left:34%;width:1.5%;background:var(--moss)"></span>
+                    <span class="ev" style="left:44%;width:1.5%;background:var(--moss)"></span>
+                    <span class="ev" style="left:52%;width:1.5%;background:var(--crimson)"></span>
+                  </div></div>
+                  <div class="lane"><span class="lname">gate</span><div class="track">
+                    <span class="ev" style="left:45%;width:3%;background:var(--moss)"></span>
+                    <span class="ev" style="left:58%;width:3%;background:var(--crimson)"></span>
+                  </div></div>
+                  <div class="lane"><span class="lname">lock</span><div class="track">
+                    <span class="ev" style="left:12%;width:48%;background:var(--slate);opacity:.5"></span>
+                    <span class="ev" style="left:14%;width:26%;background:var(--slate);opacity:.5"></span>
+                  </div></div>
+                  <div class="lane"><span class="lname">approval</span><div class="track">
+                    <span class="ev" style="left:1%;width:2%;background:var(--wheat)"></span>
+                    <span class="ev" style="left:74%;width:2%;background:var(--wheat)"></span>
+                  </div></div>
+                  <div class="ruler">
+                    <span>00:00</span><span>00:10</span><span>00:20</span>
+                    <span>00:30</span><span>00:40</span><span>00:50</span>
+                  </div>
+                </div>
+
+                <div class="phead" style="border-top:1px solid var(--line)">
+                  Events at playhead<span class="r"><span>seq 812 &#8212; 817</span></span></div>
+                <div style="padding:10px 14px;font-family:var(--mono);font-size:11px;
+                  display:flex;flex-direction:column;gap:0">
+                  <div style="display:flex;gap:12px;padding:5px 0;border-bottom:1px solid var(--line)">
+                    <span class="dim">00:26.180</span><span class="dim" style="width:34px">812</span>
+                    <span class="em" style="width:130px">tool.called</span>
+                    <span class="b" style="flex:1">edit_file src/mw/rateLimit.ts</span>
+                    <span class="dim">n2</span></div>
+                  <div style="display:flex;gap:12px;padding:5px 0;border-bottom:1px solid var(--line)">
+                    <span class="dim">00:26.204</span><span class="dim" style="width:34px">813</span>
+                    <span class="em" style="width:130px">checkpoint.taken</span>
+                    <span style="flex:1;color:var(--ink-2)">overlay base &#183; 1 path</span>
+                    <span class="dim">n2</span></div>
+                  <div style="display:flex;gap:12px;padding:5px 0;border-bottom:1px solid var(--line)">
+                    <span class="dim">00:26.395</span><span class="dim" style="width:34px">814</span>
+                    <span class="mo" style="width:130px">epoch.bumped</span>
+                    <span style="flex:1;color:var(--ink-2)">src/mw/rateLimit.ts &#8594; 4</span>
+                    <span class="dim">n2</span></div>
+                  <div style="display:flex;gap:12px;padding:5px 0;border-bottom:1px solid var(--line)">
+                    <span class="dim">00:26.401</span><span class="dim" style="width:34px">815</span>
+                    <span class="mo" style="width:130px">cache.invalidated</span>
+                    <span style="flex:1;color:var(--ink-2)">3 entries keyed on that path</span>
+                    <span class="dim">&#8212;</span></div>
+                  <div style="display:flex;gap:12px;padding:5px 0;border-bottom:1px solid var(--line)">
+                    <span class="dim">00:26.402</span><span class="dim" style="width:34px">816</span>
+                    <span class="cr" style="width:130px">guard.fenced</span>
+                    <span style="flex:1;color:var(--ink-2)">tool result wrapped &#183; 2,880 tok &#183; untrusted</span>
+                    <span class="dim">n2</span></div>
+                  <div style="display:flex;gap:12px;padding:5px 0">
+                    <span class="dim">00:26.440</span><span class="dim" style="width:34px">817</span>
+                    <span class="sl" style="width:130px">lock.contended</span>
+                    <span style="flex:1;color:var(--ink-2)">n4 waiting on src/mw/** held by n2</span>
+                    <span class="dim">n4</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col right" style="width:300px">
+              <div class="phead">State at 00:26.4</div>
+              <div class="pbody">
+                <div style="font-family:var(--mono);font-size:11px;color:var(--ink-2)">
+                  <div class="specrow"><b>nodes done</b><span>1</span></div>
+                  <div class="specrow"><b>running</b><span>2</span></div>
+                  <div class="specrow"><b>blocked</b><span>1</span></div>
+                  <div class="specrow"><b>locks held</b><span>2</span></div>
+                  <div class="specrow"><b>tokens</b><span>11,204</span></div>
+                  <div class="specrow"><b>cost</b><span>$0.00</span></div>
+                </div>
+                <p style="font-size:12.5px;color:var(--ink-3);margin-top:16px;line-height:1.55">
+                  The event log is the source of truth &#8212; run state is a fold over it. Scrubbing
+                  replays that fold, which is the same mechanism that powers crash resume
+                  and offline test replay.</p>
+              </div>
+            </div>
+          </div>
+          <div class="strip">
+            <span class="seg2"><b>run</b> 4f2a &#183; completed</span>
+            <span class="seg2"><b>events</b> <span class="num">1,284</span></span>
+            <span class="seg2 last"><span class="pill p-mute">export ndjson</span></span>
+          </div>
+        </div>
+      </div>
+      <p class="caption">Timeline &#8212; scrub the event log; state at any point is a fold to that sequence</p>
+    </div>
+
+    <!-- ---------- SETTINGS ---------- -->
+    <div class="viewwrap" id="v-set" hidden>
+      <div class="scroller">
+        <div class="app" style="height:600px">
+          <div class="titlebar">
+            <div class="ws"><span class="dot"></span><span>api-svc</span>
+              <span class="path">~/projects/api-svc</span></div>
+            <div class="tb-center"><span class="pill p-mute">settings</span></div>
+            <div class="wctl"><i>&#8212;</i><i>&#9634;</i><i>&#10005;</i></div>
+          </div>
+          <div class="body">
+            <div class="rail" data-active="settings"></div>
+
+            <div class="col left" style="width:200px">
+              <div class="phead">Settings</div>
+              <div class="pbody">
+                <div class="snav">
+                  <div>Providers &amp; keys</div>
+                  <div class="on">Permissions</div>
+                  <div>Sandbox</div>
+                  <div>Routing policy</div>
+                  <div>Budgets</div>
+                  <div>Memory &amp; index</div>
+                  <div>Appearance</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col center">
+              <div class="phead">Permission matrix
+                <span class="r"><span>persona &#215; tool &#215; scope</span></span></div>
+              <div class="pbody">
+                <p style="font-size:13px;color:var(--ink-2);margin-bottom:16px;max-width:60ch">
+                  Resolved once at pre-flight. A node can never discover new permissions mid-run &#8212;
+                  if it needs something not granted here, it parks and escalates.</p>
+                <table class="matrix">
+                  <thead><tr><th>Tool</th><th>planner</th><th>coder</th><th>tester</th>
+                    <th>reviewer</th><th>summarizer</th></tr></thead>
+                  <tbody>
+                    <tr><td>read_file &#183; glob &#183; grep</td>
+                      <td><span class="mk allow">allow</span></td><td><span class="mk allow">allow</span></td>
+                      <td><span class="mk allow">allow</span></td><td><span class="mk allow">allow</span></td>
+                      <td><span class="mk deny">deny</span></td></tr>
+                    <tr><td>write_file &#183; edit_file</td>
+                      <td><span class="mk deny">deny</span></td><td><span class="mk allow">allow</span></td>
+                      <td><span class="mk allow">allow</span></td><td><span class="mk deny">deny</span></td>
+                      <td><span class="mk deny">deny</span></td></tr>
+                    <tr><td>run_command <span class="dim">tier 1</span></td>
+                      <td><span class="mk deny">deny</span></td><td><span class="mk allow">allow</span></td>
+                      <td><span class="mk allow">allow</span></td><td><span class="mk ask">ask</span></td>
+                      <td><span class="mk deny">deny</span></td></tr>
+                    <tr><td>run_command <span class="dim">tier 2 &#183; docker</span></td>
+                      <td><span class="mk deny">deny</span></td><td><span class="mk ask">ask</span></td>
+                      <td><span class="mk ask">ask</span></td><td><span class="mk deny">deny</span></td>
+                      <td><span class="mk deny">deny</span></td></tr>
+                    <tr><td>git_commit</td>
+                      <td><span class="mk deny">deny</span></td><td><span class="mk allow">allow</span></td>
+                      <td><span class="mk deny">deny</span></td><td><span class="mk deny">deny</span></td>
+                      <td><span class="mk deny">deny</span></td></tr>
+                    <tr><td>git_push <span class="cr">irreversible</span></td>
+                      <td><span class="mk deny">deny</span></td><td><span class="mk ask">ask</span></td>
+                      <td><span class="mk deny">deny</span></td><td><span class="mk deny">deny</span></td>
+                      <td><span class="mk deny">deny</span></td></tr>
+                    <tr><td>http_get <span class="dim">network</span></td>
+                      <td><span class="mk ask">ask</span></td><td><span class="mk ask">ask</span></td>
+                      <td><span class="mk deny">deny</span></td><td><span class="mk deny">deny</span></td>
+                      <td><span class="mk deny">deny</span></td></tr>
+                  </tbody>
+                </table>
+                <p style="font-size:12.5px;color:var(--ink-3);margin-top:16px;max-width:60ch;line-height:1.55">
+                  The summarizer is denied everything by design &#8212; it reads untrusted tool output,
+                  so it runs tool-less in a disposable context.</p>
+              </div>
+            </div>
+
+            <div class="col right" style="width:300px">
+              <div class="phead">Privacy</div>
+              <div class="pbody">
+                <div style="border:1px solid var(--ember);background:var(--ember-dim);
+                  border-radius:var(--r);padding:11px">
+                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+                    <span style="font-family:var(--mono);font-size:11px;color:var(--ember)">local-only</span>
+                    <span style="margin-left:auto;width:30px;height:16px;background:var(--ember);
+                      border-radius:9px;position:relative;display:block">
+                      <span style="position:absolute;right:2px;top:2px;width:12px;height:12px;
+                        border-radius:50%;background:var(--ground);display:block"></span></span>
+                  </div>
+                  <p style="font-size:12.5px;color:var(--ink-2);margin:0;line-height:1.5">
+                    Cloud adapters are disabled globally and greyed out in the model manager.
+                    No request leaves this machine.</p>
+                </div>
+
+                <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+                  text-transform:uppercase;color:var(--ink-3);margin:18px 0 10px">Sandbox defaults</div>
+                <div style="font-family:var(--mono);font-size:11px;color:var(--ink-2)">
+                  <div class="specrow"><b>default tier</b><span>T1 subprocess</span></div>
+                  <div class="specrow"><b>network</b><span>denied at T1</span></div>
+                  <div class="specrow"><b>timeout</b><span>120s</span></div>
+                  <div class="specrow"><b>memory cap</b><span>2 GB &#183; job object</span></div>
+                  <div class="specrow"><b>output cap</b><span>10 MB</span></div>
+                  <div class="specrow"><b>untrusted code</b><span>T2 docker</span></div>
+                </div>
+                <p style="font-size:12px;color:var(--ink-3);margin-top:14px;line-height:1.55">
+                  Windows has no seccomp equivalent. T1 path jailing guards against mistakes;
+                  Docker is the real boundary.</p>
+              </div>
+            </div>
+          </div>
+          <div class="strip">
+            <span class="seg2"><b>scope</b> workspace &#183; .aca/config.json</span>
+            <span class="seg2 last"><span class="pill p-done">saved</span></span>
+          </div>
+        </div>
+      </div>
+      <p class="caption">Settings &#8212; permission matrix resolved at pre-flight, never mid-run</p>
+    </div>
+  </section>
+
+  <!-- ============ CLI ============ -->
+  <section class="pane" id="cli" hidden>
+
+    <div class="block prose">
+      <p>Ink TUI at 96 columns, degrading cleanly to 80. It opens in <b style="color:var(--ink);
+      font-weight:500">chat</b> &#8212; ask a question, get an answer, no ceremony. Only when you ask
+      for work does it escalate into a plan, and only then does the DAG panel appear. Colour is the
+      same heat ramp, with glyphs carrying state independently so it survives <code>NO_COLOR</code>
+      and screen readers.</p>
+    </div>
+
+    <div class="block">
+      <h2>Chat &#8212; the default state</h2>
+      <div class="scroller">
+        <div class="term">
+          <div class="tt">aca &#8212; ~/projects/api-svc &#8212; 96 &#215; 34</div>
+          <div class="tb">
+            <div><span class="dim">workspace</span> <span class="b">api-svc</span>
+              <span class="dim">~/projects/api-svc &#183; feature/rate-limit &#183; indexed 4,812 chunks</span></div>
+            <div><span class="dim">model</span> <span class="b">qwen3.6:35b</span>
+              <span class="dim">ollama &#183; resident &#183; tools native &#183; local-only</span></div>
+            <div class="dim" style="padding-bottom:6px">/model to switch &#183; /ws to change workspace &#183;
+              @path to attach a file &#183; /plan to escalate</div>
+
+            <div><span class="em">&#8250;</span> <span class="b">how does the upload endpoint authenticate right now?</span></div>
+            <div style="padding:5px 0">
+              <span class="dim">&#9492;</span> <span class="mo">&#10003;</span> read_file <span class="dim">src/mw/auth.ts</span>
+              &nbsp;<span class="mo">&#10003;</span> grep <span class="dim">"upload" &#183; 6 hits</span></div>
+            <div>Bearer token via <span class="b">requireAuth</span> <span class="dim">(src/mw/auth.ts:34)</span>,
+              applied per-route rather than globally.</div>
+            <div>The upload route mounts it at <span class="dim">src/routes/upload.ts:12</span>.
+              No rate limiting anywhere in the chain.</div>
+
+            <div style="padding-top:8px"><span class="em">&#8250;</span>
+              <span class="b">add rate limiting to it &#8212; 100 req/min per key</span></div>
+
+            <div class="tpanel" style="border-color:var(--ember)">
+              <div class="th" style="color:var(--ember);border-color:var(--ember)">
+                <span>&#9656; proposed plan &#183; 6 nodes &#183; 2 branches</span>
+                <span class="r" style="letter-spacing:0;text-transform:none">est 12k tok &#183; $0.00</span></div>
+              <div class="tc">
+                <div class="tline"><span class="tid dim">n1</span><span class="tnm">read middleware config</span>
+                  <span class="tmd wide dim">read src/mw/**</span></div>
+                <div class="tline"><span class="tid dim">n2</span><span class="tnm">implement limiter</span>
+                  <span class="tmd wide dim">write src/mw/rateLimit.ts</span></div>
+                <div class="tline"><span class="tid dim">n3</span><span class="tnm">add limiter tests</span>
+                  <span class="tmd wide dim">write test/rateLimit.spec.ts</span></div>
+                <div class="tline"><span class="tid dim">n4</span><span class="tnm">wire into router</span>
+                  <span class="tmd wide dim">write src/mw/index.ts</span></div>
+                <div class="tline"><span class="tid dim">n5</span><span class="tnm">benchmark throughput</span>
+                  <span class="tmd wide dim">read-only</span></div>
+                <div class="tline"><span class="tid dim">n6</span><span class="tnm">push branch</span>
+                  <span class="tmd wide cr">irreversible</span></div>
+                <div style="padding-top:8px"><span class="em">[a]</span> <span class="b">approve &amp; run</span>
+                  &nbsp;<span class="dim">[e]</span> edit plan &nbsp;<span class="cr">[r]</span> reject
+                  &nbsp;<span class="dim">&#8212; n6 asks again at execution</span></div>
+              </div>
+            </div>
+            <div><span class="em">&#8250;</span> <span class="cursor" style="background:var(--ember);
+              display:inline-block;width:7px;height:13px;vertical-align:-2px"></span></div>
+          </div>
+          <div class="tfoot">
+            <span><span class="dim">ctx</span> <span class="b">12,400</span></span>
+            <span><span class="dim">cost</span> <span class="b">$0.00</span></span>
+            <span class="r"><span class="kbd">/model</span> <span class="kbd">/ws</span>
+              <span class="kbd">/plan</span> <span class="kbd">?</span></span>
+          </div>
+        </div>
+      </div>
+      <p class="caption">Plain conversation until you ask for work &#8212; then the plan arrives inline, same as desktop</p>
+    </div>
+
+    <div class="block">
+      <h2>Workspace picker &#8212; <span style="font-family:var(--mono);text-transform:none;letter-spacing:0;color:var(--ink)">/ws</span></h2>
+      <div class="scroller">
+        <div class="term" style="width:720px">
+          <div class="tt">aca &#8212; select workspace</div>
+          <div class="tb">
+            <div class="tpanel">
+              <div class="th"><span>workspace</span><span class="r">&#8593;&#8595; select &#183; enter open</span></div>
+              <div class="tc">
+                <div class="tline" style="background:var(--ember-dim);margin:0 -10px;padding:2px 10px">
+                  <span class="tid em">&#9656;</span><span class="tnm b">api-svc</span>
+                  <span class="tmd wide dim">~/projects/api-svc</span>
+                  <span class="tst mo">indexed</span></div>
+                <div class="tline"><span class="tid dim">&#9656;</span><span class="tnm">dashboard-ui</span>
+                  <span class="tmd wide dim">~/projects/dashboard-ui</span>
+                  <span class="tst wh">stale</span></div>
+                <div class="tline"><span class="tid dim">&#9656;</span><span class="tnm">infra-terraform</span>
+                  <span class="tmd wide dim">~/work/infra-terraform</span>
+                  <span class="tst sl">no index</span></div>
+                <div class="tline" style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px">
+                  <span class="tid em">+</span><span class="tnm">open a folder&#8230;</span></div>
+                <div class="tline"><span class="tid em">+</span><span class="tnm">clone from git&#8230;</span></div>
+              </div>
+            </div>
+            <div class="dim">api-svc &#183; 1,204 files &#183; 4,812 chunks &#183; last run 2h ago &#183; 2 paths locked</div>
+            <div style="padding-top:10px"><span class="em">$</span> <span class="b">aca ws add ~/work/infra-terraform --index</span></div>
+            <div><span class="mo">&#10003;</span> added <span class="dim">&#183; indexing 892 files&#8230;</span>
+              <span class="em">&#9612;&#9612;&#9612;&#9612;&#9612;&#9612;&#9612;</span><span class="dim">&#9612;&#9612;&#9612;</span> 71%</div>
+          </div>
+          <div class="tfoot"><span class="dim">aca ws list &#183; add &#183; switch &#183; index &#183; forget</span>
+            <span class="r"><span class="kbd">esc</span> cancel</span></div>
+        </div>
+      </div>
+      <p class="caption">Repo selection has a flag equivalent like everything else</p>
+    </div>
+
+    <div class="block">
+      <h2>Running &#8212; a plan you approved</h2>
+      <div class="scroller">
+        <div class="term">
+          <div class="tt">aca &#8212; ~/projects/api-svc &#8212; 96 &#215; 34</div>
+          <div class="tb">
+            <div><span class="em">&#8250;</span> <span class="b">add rate limiting to the /api/upload endpoint</span></div>
+            <div style="margin-top:8px">
+              <div><span class="mo">&#10003;</span> <span class="dim stg">guard</span> clean &#183; in scope</div>
+              <div><span class="mo">&#10003;</span> <span class="dim stg">optimize</span> 3 acceptance criteria</div>
+              <div><span class="mo">&#10003;</span> <span class="dim stg">preflight</span> 7 tools &#183; 2 need approval</div>
+              <div><span class="mo">&#10003;</span> <span class="dim stg">plan</span> 6 nodes &#183; 2 branches &nbsp;<span class="kbd">v</span> <span class="dim">view</span></div>
+            </div>
+
+            <div class="tpanel">
+              <div class="th"><span>plan graph</span><span class="r">6 nodes &#183; 2 running &#183; 1 blocked</span></div>
+              <div class="tc">
+                <div class="tline"><span class="tid mo">&#10003;</span><span class="tnm">n1 read middleware config</span>
+                  <span class="tst mo">done</span><span class="tmd">granite4:3.4b</span><span class="tt2">1.2s</span></div>
+                <div class="tline"><span class="tid em">&#9654;</span><span class="tnm b">n2 implement limiter</span>
+                  <span class="tst em">running</span><span class="tmd">qwen3.6:35b</span><span class="tt2">14.1s</span></div>
+                <div class="tline tsub">&#9492; write &#9656; src/mw/rateLimit.ts</div>
+                <div class="tline"><span class="tid em">&#9654;</span><span class="tnm b">n3 add limiter tests</span>
+                  <span class="tst em">running</span><span class="tmd">qwen3.6-27b</span><span class="tt2">9.7s</span></div>
+                <div class="tline tsub">&#9492; write &#9656; test/rateLimit.spec.ts</div>
+                <div class="tline"><span class="tid sl">&#9675;</span><span class="tnm">n4 wire into router</span>
+                  <span class="tst sl">blocked</span><span class="tmd">&#8212; </span><span class="tt2">&#8212;</span></div>
+                <div class="tline tsub sl">&#9492; &#128274; write set src/mw/** held by n2</div>
+                <div class="tline"><span class="tid cr">&#10007;</span><span class="tnm">n5 benchmark throughput</span>
+                  <span class="tst cr">retry 1/2</span><span class="tmd">gemma4:8b</span><span class="tt2">6.4s</span></div>
+                <div class="tline tsub cr">&#9492; gate unit &#10007; &#8212; 2 of 14 failed</div>
+                <div class="tline"><span class="tid wh">&#9888;</span><span class="tnm">n6 push branch</span>
+                  <span class="tst wh">approval</span><span class="tmd">irreversible</span><span class="tt2">held</span></div>
+              </div>
+            </div>
+
+            <div style="margin-top:4px">
+              <div><span class="dim">n2 &#8250;</span> <span class="sl">thinking</span> <span class="dim">the burst case needs its own bucket refill path&#8230;</span></div>
+              <div><span class="dim">n2 &#8250;</span> edit_file <span class="b">src/mw/rateLimit.ts</span> <span class="mo">+84 &#8722;0</span></div>
+              <div><span class="dim">n3 &#8250;</span> run_command <span class="b">npm test -- rateLimit</span> <span class="dim">&#8230;</span><span class="cursor" style="background:var(--ember);display:inline-block;width:7px;height:13px;vertical-align:-2px"></span></div>
+            </div>
+          </div>
+          <div class="tfoot">
+            <span><span class="dim">tokens</span> <span class="b">18,240</span></span>
+            <span><span class="dim">cost</span> <span class="b">$0.00</span></span>
+            <span><span class="dim">vram</span> <span class="b">24.6/32.0</span></span>
+            <span><span class="dim">elapsed</span> <span class="b">00:41</span></span>
+            <span class="r"><span class="kbd">tab</span> focus <span class="kbd">d</span> diff <span class="kbd">esc</span> cancel</span>
+          </div>
+        </div>
+      </div>
+      <p class="caption">Default running view &#8212; state glyph, model, and elapsed on every node line</p>
+    </div>
+
+    <div class="block">
+      <h2>Approval &#8212; interrupts, cannot be missed</h2>
+      <div class="scroller">
+        <div class="term">
+          <div class="tt">aca &#8212; approval required</div>
+          <div class="tb">
+            <div class="dim">n5 &#10007; retry 1/2 &#183; gate unit</div>
+            <div class="dim">n6 &#9888; held</div>
+            <div class="tpanel" style="border-color:var(--wheat)">
+              <div class="th" style="color:var(--wheat);border-color:var(--wheat)">
+                <span>&#9888; approval required &#8212; node n6</span><span class="r">irreversible</span></div>
+              <div class="tc">
+                <div class="b" style="padding:4px 0">git push origin feature/rate-limit</div>
+                <div class="dim" style="padding-bottom:8px">Node contract declares a remote publish.
+                  Plan approval does not cover irreversible actions.</div>
+                <div class="dim">writes &nbsp;&nbsp;&nbsp;<span class="b">origin/feature/rate-limit</span> (new branch)</div>
+                <div class="dim">commits &nbsp;<span class="b">3</span> &#183; 199 insertions, 1 deletion</div>
+                <div class="dim">rollback <span class="cr">not possible after execution</span></div>
+                <div style="padding-top:10px">
+                  <span class="wh">[a]</span> <span class="b">approve once</span> &nbsp;
+                  <span class="wh">[A]</span> approve for this run &nbsp;
+                  <span class="cr">[r]</span> reject &nbsp;
+                  <span class="dim">[e]</span> edit command
+                </div>
+              </div>
+            </div>
+            <div class="dim">waiting&#8230; other nodes continue<span class="cursor" style="background:var(--wheat);display:inline-block;width:7px;height:13px;vertical-align:-2px"></span></div>
+          </div>
+          <div class="tfoot"><span class="wh">1 approval pending</span>
+            <span class="r"><span class="kbd">esc</span> cancel run</span></div>
+        </div>
+      </div>
+      <p class="caption">Wheat is reserved for &#8220;waiting on you&#8221; &#8212; the only state that pulses</p>
+    </div>
+
+    <div class="block">
+      <h2>Node focus &#8212; <span style="font-family:var(--mono);text-transform:none;letter-spacing:0;color:var(--ink)">tab</span> into a node</h2>
+      <div class="scroller">
+        <div class="term">
+          <div class="tt">aca &#8212; node n2 &#8212; context</div>
+          <div class="tb">
+            <div class="tpanel">
+              <div class="th"><span>n2 implement limiter</span>
+                <span class="r"><span class="em">context</span> <span class="dim">model &#183; tools &#183; gates &#183; diff</span></span></div>
+              <div class="tc">
+                <div class="tline"><span class="tid dim">1</span><span class="tnm b">system + persona contract</span>
+                  <span class="tt2">1,204</span><span class="dim" style="width:70px;text-align:right">pinned</span></div>
+                <div class="tline"><span class="tid dim">2</span><span class="tnm b">node contract &amp; write set</span>
+                  <span class="tt2">486</span><span class="dim" style="width:70px;text-align:right">pinned</span></div>
+                <div class="tline"><span class="tid dim">3</span><span class="tnm">critique constraints &#183; round 1</span>
+                  <span class="tt2">312</span><span class="dim" style="width:70px;text-align:right"></span></div>
+                <div class="tline"><span class="tid dim">4</span><span class="tnm">confirmed lessons (2)</span>
+                  <span class="tt2">198</span><span class="dim" style="width:70px;text-align:right"></span></div>
+                <div class="tline"><span class="tid dim">5</span><span class="tnm">T2 delta from n1</span>
+                  <span class="tt2">744</span><span class="dim" style="width:70px;text-align:right"></span></div>
+                <div class="tline"><span class="tid dim">6</span><span class="tnm">T3 retrieved &#183; 5 chunks</span>
+                  <span class="tt2">3,120</span><span class="dim" style="width:70px;text-align:right"></span></div>
+                <div class="tline" style="background:var(--crimson-dim);margin:0 -10px;padding:2px 10px">
+                  <span class="tid cr">7</span><span class="tnm cr">&#9888; tool results &#183; fenced untrusted</span>
+                  <span class="tt2 cr">2,880</span><span class="dim" style="width:70px;text-align:right"></span></div>
+                <div class="tline dim"><span class="tid">8</span><span class="tnm">raw turns</span>
+                  <span class="tt2">3,456</span><span style="width:70px;text-align:right">evictable</span></div>
+                <div class="tline" style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px">
+                  <span class="tnm dim">12,400 / 196,608 &#183; 25% headroom held</span>
+                  <span class="dim">qwen3.6:35b</span></div>
+              </div>
+            </div>
+            <div class="dim">routed here: resident +0.20 &#183; reliability 0.94 &#183; 41 t/s &#183; local-only satisfied</div>
+          </div>
+          <div class="tfoot"><span class="dim"><span class="kbd">&#8592;</span> <span class="kbd">&#8594;</span> tabs</span>
+            <span class="dim"><span class="kbd">l</span> raw model log</span>
+            <span class="r"><span class="kbd">esc</span> back to graph</span></div>
+        </div>
+      </div>
+      <p class="caption">&#8220;What did the model actually see&#8221; &#8212; normally unanswerable, here it&#8217;s one keypress</p>
+    </div>
+
+    <div class="block">
+      <h2>Headless &#8212; same events, machine-readable</h2>
+      <div class="scroller">
+        <div class="term" style="width:760px">
+          <div class="tt">aca run --yes --json | jq -c 'select(.type|startswith("gate"))'</div>
+          <div class="tb" style="font-size:11.5px;line-height:1.7">
+            <div><span class="dim">{</span><span class="str">"seq"</span><span class="dim">:</span>804<span class="dim">,</span><span class="str">"type"</span><span class="dim">:</span><span class="mo">"gate.passed"</span><span class="dim">,</span><span class="str">"node"</span><span class="dim">:</span><span class="mo">"n2"</span><span class="dim">,</span><span class="str">"gate"</span><span class="dim">:</span><span class="mo">"typecheck"</span><span class="dim">,</span><span class="str">"ms"</span><span class="dim">:</span>3412<span class="dim">}</span></div>
+            <div><span class="dim">{</span><span class="str">"seq"</span><span class="dim">:</span>829<span class="dim">,</span><span class="str">"type"</span><span class="dim">:</span><span class="cr">"gate.failed"</span><span class="dim">,</span><span class="str">"node"</span><span class="dim">:</span><span class="mo">"n5"</span><span class="dim">,</span><span class="str">"gate"</span><span class="dim">:</span><span class="mo">"unit"</span><span class="dim">,</span><span class="str">"failed"</span><span class="dim">:</span>2<span class="dim">,</span><span class="str">"retryable"</span><span class="dim">:</span><span class="em">true</span><span class="dim">}</span></div>
+            <div><span class="dim">{</span><span class="str">"seq"</span><span class="dim">:</span>871<span class="dim">,</span><span class="str">"type"</span><span class="dim">:</span><span class="mo">"gate.passed"</span><span class="dim">,</span><span class="str">"node"</span><span class="dim">:</span><span class="mo">"n5"</span><span class="dim">,</span><span class="str">"gate"</span><span class="dim">:</span><span class="mo">"unit"</span><span class="dim">,</span><span class="str">"attempt"</span><span class="dim">:</span>2<span class="dim">}</span></div>
+            <div style="margin-top:10px" class="dim"># exit 0 &#183; 6 nodes &#183; 3 files changed &#183; 0 escalations</div>
+            <div style="margin-top:14px"><span class="em">$</span> <span class="b">aca doctor</span></div>
+            <div><span class="mo">&#10003;</span> daemon &nbsp;&nbsp;&nbsp;<span class="dim">:51733 &#183; pid 8412 &#183; uptime 4h</span></div>
+            <div><span class="mo">&#10003;</span> ollama &nbsp;&nbsp;&nbsp;<span class="dim">:11434 &#183; 4 models &#183; 2 slots &#183; 12ms</span></div>
+            <div><span class="mo">&#10003;</span> lmstudio &nbsp;<span class="dim">:1234 &#183; 3 models &#183; 1 slot &#183; 8ms</span></div>
+            <div><span class="sl">&#9675;</span> llama.cpp <span class="dim">not started &#183; binary found</span></div>
+            <div><span class="wh">&#9888;</span> anthropic <span class="dim">no key &#183; cloud routing disabled</span></div>
+            <div><span class="mo">&#10003;</span> vram &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="dim">24.6 / 32.0 GB &#183; 3 resident</span></div>
+            <div><span class="mo">&#10003;</span> index &nbsp;&nbsp;&nbsp;&nbsp;<span class="dim">4,812 chunks &#183; fresh</span></div>
+            <div><span class="wh">&#9888;</span> probes &nbsp;&nbsp;&nbsp;<span class="dim">1 model unprobed &#8212; run</span> <span class="b">aca models probe --all</span></div>
+          </div>
+        </div>
+      </div>
+      <p class="caption">Every interactive action has a flag equivalent &#8212; nothing is TUI-only</p>
+    </div>
+
+    <div class="block">
+      <h2>Keymap</h2>
+      <div class="grid2">
+        <div>
+          <div class="specrow"><b>Cycle focus &#8212; input / graph / node</b><span>tab</span></div>
+          <div class="specrow"><b>View full plan</b><span>v</span></div>
+          <div class="specrow"><b>Diff for focused node</b><span>d</span></div>
+          <div class="specrow"><b>Raw model log</b><span>l</span></div>
+          <div class="specrow"><b>Node detail tabs</b><span>&#8592; &#8594;</span></div>
+        </div>
+        <div>
+          <div class="specrow"><b>Approve / reject at a gate</b><span>a  &#183;  r</span></div>
+          <div class="specrow"><b>Approve for whole run</b><span>shift+a</span></div>
+          <div class="specrow"><b>Retry / skip focused node</b><span>R  &#183;  S</span></div>
+          <div class="specrow"><b>Cancel run &#8212; checkpoints</b><span>esc</span></div>
+          <div class="specrow"><b>Help</b><span>?</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+  (function () {
+    function bind(sel, attr, resolve) {
+      var btns = Array.prototype.slice.call(document.querySelectorAll(sel));
+      btns.forEach(function (b) {
+        b.addEventListener('click', function () {
+          btns.forEach(function (o) {
+            o.setAttribute('aria-selected', String(o === b));
+            var t = document.getElementById(o.getAttribute(attr));
+            if (t) t.hidden = (o !== b);
+          });
+          if (resolve) resolve();
+        });
+      });
+    }
+    bind('nav.seg button', 'data-pane');
+    bind('.tabs button', 'data-view');
+
+    var RAIL = [
+      ['session','Session','<path d="M21 11.5a8 8 0 0 1-8 8H8.2L3.5 22.5V17A8 8 0 1 1 21 11.5z"/>'],
+      ['files','Files','<path d="M4 4v16M4 7h5M4 12h5M4 17h5M12 5h8M12 10h8M12 15h8M12 20h5"/>'],
+      ['diff','Diff','<path d="M4 5h7v14H4zM13 5h7v14h-7zM6.5 12h2M15.5 10h2M15.5 14h2"/>'],
+      ['time','Timeline','<path d="M3 12h18M7 8v8M12 5v14M17 9v6"/>'],
+      ['models','Models','<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9zM9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"/>'],
+      ['settings','Settings','<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>']
+    ];
+    Array.prototype.forEach.call(document.querySelectorAll('.rail'), function (r) {
+      var act = r.getAttribute('data-active'), h = '';
+      RAIL.forEach(function (it) {
+        if (it[0] === 'settings') h += '<div class="spacer"></div>';
+        h += '<a class="' + (it[0] === act ? 'on' : '') + '" title="' + it[1] +
+             '"><svg viewBox="0 0 24 24">' + it[2] + '</svg></a>';
+      });
+      r.innerHTML = h;
+    });
+  })();
+</script>

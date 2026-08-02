@@ -1,0 +1,14 @@
+export { PathEscape, resolveInWorkspace, toResourceId } from "./paths.ts";
+export { Checkpoint, DEFAULT_IGNORES, type VerifyResult } from "./checkpoint.ts";
+export { execSandboxed, scrubEnv, type ExecOptions, type ExecResult } from "./sandbox/exec.ts";
+export {
+  DEFAULT_MATRIX,
+  resolvePermission,
+  ToolRegistry,
+  zodToJsonSchema,
+  type PermissionMatrix,
+  type ToolContext,
+  type ToolDef,
+  type ToolResult,
+} from "./registry.ts";
+export { BUILTIN_TOOLS, globToRegExp, registerBuiltins } from "./builtins.ts";
