@@ -13,7 +13,14 @@ pnpm aca doctor
 pnpm aca run "add a guard clause to divide" --local-only
 ```
 
-## Documents
+## Start here
+
+| | |
+|---|---|
+| **[Project_context.md](Project_context.md)** | How the system works — architecture, concepts, data model, interfaces. Read this first. |
+| **[Project_Progress.md](Project_Progress.md)** | What changed from the original design, bugs found running it, and what is left to do. |
+
+## Design records
 
 | | |
 |---|---|
