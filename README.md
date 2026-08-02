@@ -2,14 +2,15 @@
 
 An autonomous coding agent with an interactive CLI and a desktop app, running against local models (Ollama, LM Studio, llama.cpp) and cloud models, routed per task.
 
-**Status:** engine implemented and verified live. 135 tests passing; all 18 flow-review findings closed; the full goal-to-execution flow runs on local models.
+**Status:** all 12 milestones implemented. 244 tests passing; all 18 flow-review findings closed; the full goal-to-execution flow runs on local models, with a daemon, a TUI and an Electron desktop app.
 See [07 — Implementation status](docs/07-implementation-status.md).
 
 ```bash
 pnpm install && pnpm test
-node --experimental-strip-types packages/cli/src/bin.ts doctor
-node --experimental-strip-types packages/cli/src/bin.ts chat "how does auth work here?" --local-only
-node --experimental-strip-types packages/cli/src/bin.ts run "add a guard clause to divide" --local-only
+pnpm daemon                 # engine
+pnpm aca                    # interactive TUI
+pnpm aca doctor
+pnpm aca run "add a guard clause to divide" --local-only
 ```
 
 ## Documents
@@ -22,7 +23,7 @@ node --experimental-strip-types packages/cli/src/bin.ts run "add a guard clause 
 | [04 — Interfaces](docs/04-interfaces.md) | What each surface shows — CLI TUI and desktop |
 | [05 — Implementation plan](docs/05-implementation-plan.md) | 12 milestones, 83 days, risks, testing |
 | [06 — UI design spec](docs/06-ui-design.md) | Tokens, dimensions, layout rules · mockup: [`design/ui-design.html`](design/ui-design.html) |
-| [07 — Implementation status](docs/07-implementation-status.md) | What exists, which finding each piece closes, deviations |
+| [07 — Implementation status](docs/07-implementation-status.md) | Milestone state, findings closed, deviations, known limits |
 
 ## Shape in one paragraph
 

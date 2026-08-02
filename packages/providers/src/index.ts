@@ -25,3 +25,9 @@ export {
 export { ProbeSuite, type ProbeOptions, type Scorecard } from "./probe.ts";
 export { extractCall, renderToolPrompt, ToolCallShim, withShimIfNeeded } from "./shim.ts";
 export { AnthropicProvider } from "./anthropic.ts";
+export {
+  CassetteProvider,
+  scriptedChunks,
+  scriptedProvider,
+  type CassetteMode,
+} from "./cassette.ts";

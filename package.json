@@ -24,7 +24,9 @@
     "vitest": "^2.1.9"
   },
   "dependencies": {
+    "@aca/cli": "workspace:^",
     "@aca/core": "workspace:^",
+    "@aca/daemon": "workspace:^",
     "@aca/protocol": "workspace:^",
     "@aca/providers": "workspace:^",
     "@aca/tools": "workspace:^"
