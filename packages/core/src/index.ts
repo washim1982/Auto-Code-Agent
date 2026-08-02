@@ -66,3 +66,28 @@ export {
   type StructuredGenerator,
 } from "./plan/planner.ts";
 export { normalizeDag, type NormalizeNote } from "./plan/normalize.ts";
+export {
+  InputGuard,
+  luhn,
+  type GuardFinding,
+  type InputGuardOptions,
+  type InputGuardResult,
+} from "./guard/input-guard.ts";
+export { PersonaRegistry, type Persona } from "./persona/registry.ts";
+export { AcaConfig, loadConfig, SecretStore, type ConfigSource } from "./config/config.ts";
+export {
+  log,
+  Logger,
+  redactSecrets,
+  type LogLevel,
+  type LoggerOptions,
+} from "./logging/logger.ts";
+export { chunkFile, type Chunk, type ChunkOptions } from "./memory/chunker.ts";
+export {
+  cosineSimilarity,
+  fromBlob,
+  reciprocalRankFusion,
+  toBlob,
+  type Ranked,
+} from "./memory/retrieval.ts";
+export { MemoryStore, type Embedder, type Lesson, type Retrieved } from "./memory/store.ts";

@@ -6,17 +6,31 @@ import { c } from "./theme.ts";
 import { renderModelTable } from "./render.ts";
 import { runChat } from "./chat.ts";
 import { runPlan } from "./run.ts";
+import { startTui } from "./tui/run-tui.tsx";
+import { daemonCommand, memoryCommand, runsCommand } from "./commands/extra.ts";
 
 const HELP = `${c.bold("aca")} — autonomous coding agent
 
 ${c.dim("USAGE")}
-  aca                          chat in the current workspace
+  aca                          interactive session (TUI)
   aca chat "<question>"        one-shot question, then exit
   aca plan "<goal>"            plan a change and show it; never executes
   aca run "<goal>"             plan, ask for approval, then execute
   aca models                   every provider and model, with capabilities
   aca doctor                   provider health, residency, slots
   aca ws list|add <path>       workspaces
+  aca memory index|query|lessons  build the T3 index, search it, list T4 lessons
+  aca runs [show <id>]         run history, straight from the event log
+  aca daemon status            daemon health
+  aca memory index|query|lessons  build the T3 index, search it, list T4 lessons
+  aca runs [show <id>]         run history, straight from the event log
+  aca daemon status            daemon health
+  aca memory index|query|lessons  build the T3 index, search it, list T4 lessons
+  aca runs [show <id>]         run history, straight from the event log
+  aca daemon status            daemon health
+  aca memory index|query|lessons   T3 index and T4 lessons
+  aca runs [show <id>]        run history from the event log
+  aca daemon status           daemon health
 
 ${c.dim("FLAGS")}
   --model <name>               pin a model for this session
@@ -24,6 +38,7 @@ ${c.dim("FLAGS")}
   --yes                        skip the approval gate (CI)
   --json                       machine-readable output (NDJSON events)
   --max-tokens <n>             run budget, default 400000
+  --plain                      readline REPL instead of the TUI
   --cwd <path>                 workspace root (default: current directory)
 `;
 
@@ -60,7 +75,12 @@ async function main(argv: string[]): Promise<number> {
 
   switch (command) {
     case undefined:
-      return await runChat({ root, model, localOnly });
+      // Interactive TUI by default; --plain falls back to the readline REPL
+      // for terminals that cannot do full-screen rendering.
+      if (flags.get("plain") === true || !process.stdout.isTTY) {
+        return await runChat({ root, model, localOnly });
+      }
+      return await startTui({ root, localOnly, ...(model ? { model } : {}) });
 
     case "chat": {
       const question = positional.slice(1).join(" ");
@@ -182,6 +202,15 @@ async function main(argv: string[]): Promise<number> {
       }
       return 0;
     }
+
+    case "memory":
+      return await memoryCommand({ root, localOnly, json, positional });
+
+    case "runs":
+      return await runsCommand({ root, localOnly, json, positional });
+
+    case "daemon":
+      return await daemonCommand({ root, localOnly, json, positional });
 
     default:
       process.stderr.write(c.crimson(`unknown command: ${command}\n\n`) + HELP);

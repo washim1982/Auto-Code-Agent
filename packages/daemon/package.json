@@ -1,0 +1,19 @@
+{
+  "name": "@aca/daemon",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@aca/protocol": "workspace:*",
+    "@aca/core": "workspace:*",
+    "@aca/tools": "workspace:*",
+    "@aca/providers": "workspace:*",
+    "@aca/cli": "workspace:*",
+    "ws": "^8.18.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13"
+  }
+}

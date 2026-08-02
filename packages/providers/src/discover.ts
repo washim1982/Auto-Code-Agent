@@ -3,6 +3,7 @@ import { OllamaProvider } from "./ollama.ts";
 import { LmStudioProvider } from "./lmstudio.ts";
 import { LlamaCppProvider } from "./llamacpp.ts";
 import { OpenAiCompatProvider } from "./openai-compat.ts";
+import { AnthropicProvider } from "./anthropic.ts";
 import type { ModelProvider } from "./types.ts";
 
 export interface DiscoverOptions {
@@ -66,8 +67,17 @@ export async function discoverProviders(
     }),
   );
 
-  if (options.localOnly && options.anthropicKey) {
-    skipped.push({ id: "anthropic", reason: "local-only mode" });
+  if (options.anthropicKey) {
+    if (options.localOnly) {
+      skipped.push({ id: "anthropic", reason: "local-only mode" });
+    } else {
+      const anthropic = new AnthropicProvider({ apiKey: options.anthropicKey });
+      const health = await anthropic
+        .health()
+        .catch(() => ({ up: false, latencyMs: 0, detail: "" }));
+      if (health.up) providers.push(anthropic);
+      else skipped.push({ id: "anthropic", reason: health.detail || "unreachable" });
+    }
   }
 
   return { providers, skipped };

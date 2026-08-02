@@ -22,3 +22,6 @@ export {
   type StructuredRequest,
   type StructuredResult,
 } from "./structured.ts";
+export { ProbeSuite, type ProbeOptions, type Scorecard } from "./probe.ts";
+export { extractCall, renderToolPrompt, ToolCallShim, withShimIfNeeded } from "./shim.ts";
+export { AnthropicProvider } from "./anthropic.ts";

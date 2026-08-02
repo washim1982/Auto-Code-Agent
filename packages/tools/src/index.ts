@@ -21,3 +21,10 @@ export {
 } from "./registry.ts";
 export { BUILTIN_TOOLS, globToRegExp, registerBuiltins } from "./builtins.ts";
 export { workspaceMap, type MapOptions } from "./workspace-map.ts";
+export {
+  currentBranch,
+  fileTree,
+  gitStatus,
+  type TreeEntry,
+  type TreeOptions,
+} from "./file-tree.ts";

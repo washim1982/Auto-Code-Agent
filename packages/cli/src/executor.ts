@@ -10,6 +10,7 @@ import {
   runGates,
   WorkspaceRegistry,
   WriteSetViolation,
+  PersonaRegistry,
   type BudgetMeter,
   type GateRunner,
   type NodeExecution,
@@ -39,6 +40,9 @@ export interface ExecutorOptions {
    * burning a GPU for half an hour.
    */
   meter: BudgetMeter;
+  personas: PersonaRegistry;
+  /** Records the model each node ran on, so the reviewer can be forced to differ. */
+  onRoute?: (nodeId: string, model: string) => void;
   verbose?: boolean;
   requestApproval?: (summary: string, detail: string) => Promise<boolean>;
 }
@@ -86,16 +90,10 @@ export function makeExecutor(options: ExecutorOptions) {
 
     // F9: routing is explicit and per node. A reviewer node deliberately
     // excludes nothing here, but the persona's needs differ from the coder's.
-    const decision = await options.router.route({
-      purpose: node.persona === "reviewer" ? "review" : "code",
-      needsTools: true,
-      needsVision: false,
-      needsStructured: false,
-      minContext: 16_384,
-      qualityTier: node.persona === "reviewer" ? "critical" : "standard",
-      privacy: options.localOnly ? "local-only" : "prefer-local",
-      excludeModels: [],
-    });
+    const decision = await options.router.route(
+      options.personas.requirementFor(node.persona, { localOnly: options.localOnly }),
+    );
+    options.onRoute?.(node.id, decision.chosen.id);
     options.events.append(
       options.runId,
       "node.routed",
@@ -107,6 +105,7 @@ export function makeExecutor(options: ExecutorOptions) {
       .list()
       .filter((t) => resolvePermission(DEFAULT_MATRIX, node.persona, t.name) === "allow");
 
+    const persona = options.personas.get(node.persona);
     const brief = [
       `Node ${node.id}: ${node.title}`,
       `Contract: ${node.contract || "(none stated)"}`,
@@ -127,7 +126,12 @@ export function makeExecutor(options: ExecutorOptions) {
     }
 
     const messages: ChatMessage[] = [
-      { role: "system", content: NODE_SYSTEM },
+      {
+        role: "system",
+        content: `${NODE_SYSTEM}
+
+${persona.system}`,
+      },
       { role: "user", content: brief },
     ];
 

@@ -6,6 +6,8 @@ import {
   OutputGuard,
   Planner,
   PlanValidationError,
+  InputGuard,
+  PersonaRegistry,
   RunSupervisor,
   WorkspaceRegistry,
   type SupervisorHooks,
@@ -19,6 +21,7 @@ import { renderPlanCard } from "./plan-card.ts";
 import { makeGenerator } from "./generator.ts";
 import { makeExecutor } from "./executor.ts";
 import { Progress } from "./progress.ts";
+import { makeReviewer } from "./reviewer.ts";
 
 export interface PlanRunOptions {
   root: string;
@@ -79,8 +82,39 @@ export async function runPlan(options: PlanRunOptions): Promise<number> {
     router.pin(match.id);
   }
 
+  // The first box in the flow: guard the input before anything sees it.
+  const inputGuard = new InputGuard({
+    redactPii: !options.localOnly,
+    workspaceRoot: options.root,
+    enforceScope: true,
+  });
+  const guarded = inputGuard.inspect(options.goal);
+  if (guarded.blocked) {
+    process.stderr.write(
+      c.crimson(`${guarded.reason}
+`),
+    );
+    db.close();
+    return 1;
+  }
+  const goal = guarded.text;
+
   const runId = `run-${Date.now().toString(36)}`;
-  events.append(runId, "run.created", { goal: options.goal, workspace: ws.name });
+  events.append(runId, "run.created", { goal, workspace: ws.name });
+  for (const f of guarded.findings) {
+    events.append(runId, "guard.blocked", {
+      kind: f.kind,
+      label: f.label,
+      severity: f.severity,
+    });
+    if (!options.json) {
+      process.stdout.write(`${c.wheat("⚠")} ${c.dim(`input guard: ${f.label} (${f.severity})`)}
+`);
+    }
+  }
+
+  const personas = new PersonaRegistry();
+  const nodeModels = new Map<string, string>();
 
   // Give the planner the real tree; without it, it invents plausible paths and
   // every node's write set then fails enforcement at execution time.
@@ -108,7 +142,7 @@ export async function runPlan(options: PlanRunOptions): Promise<number> {
 
   let result;
   try {
-    result = await planner.plan(options.goal);
+    result = await planner.plan(goal);
     progress.stop();
   } catch (err) {
     progress.stop();
@@ -181,6 +215,15 @@ export async function runPlan(options: PlanRunOptions): Promise<number> {
         if (!execute) throw new Error("executor not initialised");
         return execute(node, token);
       },
+      review: makeReviewer({
+        root: options.root,
+        runId,
+        router,
+        events,
+        personas,
+        localOnly: options.localOnly ?? false,
+        coderModelFor: (nodeId) => nodeModels.get(nodeId),
+      }),
       rollback: async (node: PlanNode) => {
         events.append(runId, "node.rolled_back", { nodeId: node.id }, node.id);
       },
@@ -221,6 +264,8 @@ export async function runPlan(options: PlanRunOptions): Promise<number> {
     guard,
     localOnly: options.localOnly ?? false,
     meter: supervisor.meter,
+    personas,
+    onRoute: (nodeId, model) => nodeModels.set(nodeId, model),
     verbose: !options.json,
     requestApproval: async (summary, detail) => {
       // F13: irreversible actions ask at execution time regardless of the
