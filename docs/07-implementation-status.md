@@ -3,14 +3,15 @@
 What exists in code today, which flow-review finding each piece closes, and where the
 implementation deviates from the plan. Updated as of the first implementation pass.
 
-**95 tests passing across 5 files. `tsc --noEmit` clean. Verified live against Ollama, LM Studio,
-and llama.cpp on this machine.**
+**135 tests passing across 7 files. `tsc --noEmit` clean. The full flow — goal → spec → DAG →
+approval → execution → gates → completion — runs end to end against local models only.**
 
 ```bash
 pnpm install
-pnpm test          # 95 tests
+pnpm test          # 135 tests
 pnpm typecheck
 node --experimental-strip-types packages/cli/src/bin.ts doctor
+node --experimental-strip-types packages/cli/src/bin.ts run "<goal>" --local-only
 ```
 
 ## Findings closed
@@ -79,13 +80,50 @@ runs `llama-server` as a router whose `/props` describes the router itself — `
 `n_ctx: 0` — so a naive read produced a phantom zero-context model. Reading `/v1/models` and parsing
 each entry's launch argv instead yields 7 real GGUFs with correct residency, context and quantization.
 
+## The planner
+
+Two model calls, deliberately split: compile a spec, then plan against it. Asking for both at once
+reliably produces acceptance criteria retrofitted to whatever plan the model already decided on,
+which defeats the point of having a reviewer check against them.
+
+- [`plan/schema.ts`](../packages/core/src/plan/schema.ts) — the narrow projection the model is
+  qualified to produce. Deliberately *not* `PlanNode`: runtime state like `attempts` and
+  `checkpointId` is not something a model should be inventing.
+- [`plan/validate.ts`](../packages/core/src/plan/validate.ts) — acyclicity, dependency existence,
+  workspace-relative writes, unordered write-set overlap, acceptance coverage.
+- [`plan/normalize.ts`](../packages/core/src/plan/normalize.ts) — deterministic repair of
+  unambiguous mistakes, before spending a model round-trip on them.
+- [`providers/gbnf.ts`](../packages/providers/src/gbnf.ts) — JSON Schema → GBNF, so llama.cpp
+  constrains decoding at the token level and malformed output is impossible rather than merely
+  unlikely.
+- [`providers/structured.ts`](../packages/providers/src/structured.ts) — strategy selection across
+  `grammar` / `json_schema` / `json_mode` / `prompt`, with a repair loop that feeds Zod's exact
+  field-level errors back to the model.
+
+**End-to-end, verified:** `aca run "make divide throw a clear error when b is zero"` against a
+scratch repo produced a 3-node DAG, executed it, and wrote the correct guard clause. 60s,
+20k tokens, 57 events, local models only.
+
+## Bugs the live runs found
+
+The unit tests were green through all of these; only running it for real surfaced them.
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `spawn npm ENOENT` recorded as a *gate failure*, retried twice, node rolled back | `npm` is a `.cmd` shim on Windows and `spawn` with `shell: false` cannot find it | [`resolveExecutable`](../packages/tools/src/sandbox/exec.ts) walks PATH for `.cmd`/`.exe`/`.bat` |
+| Then `spawn EINVAL` | Node blocks spawning `.cmd` without a shell (CVE-2024-27980 mitigation) | [`windowsSpawnArgs`](../packages/tools/src/sandbox/exec.ts) invokes `cmd /d /s /c` with per-argument quoting, and **rejects** arguments containing `%`/`!`/`"` rather than risk injection — `shell: true` was never an option |
+| `'C:\Program' is not recognized` | `cmd /s /c` strips only the outermost quote pair | Wrap the whole command line in an extra pair |
+| Run reported `0 tokens` while burning GPU | The executor emitted usage *events* but never fed the supervisor's meter — F15 was inert in the live path | Executor and supervisor share one `BudgetMeter` |
+| A 3B model read the same file 7 times and never wrote | Re-serving the cached result looks like new information | Duplicate tool-call signatures get told they already have the result |
+| Node marked `done` having modified nothing | Gates pass trivially with no changed files | A node that declared writes and produced none now fails its contract |
+| Planner burned all 3 repair rounds on the same mistake | Small models put file paths in `deps`; the error message was accurate but did not correct the misconception | Path-shaped deps are moved to `reads` deterministically |
+
 ## Not built yet
 
-- **Planner** — a model producing a schema-constrained DAG. `RunSupervisor` consumes plans; nothing
-  generates them.
 - **Memory T2/T3/T4** — tables exist, retrieval and write-back do not.
+- **Reviewer** — `ReviewLoop` and the supervisor hook are implemented and tested; no critic model is
+  wired into `aca run` yet, so nodes are accepted on gates alone.
 - **Capability probing** — scorecard table exists; the probe suite does not, so context windows are
   advertised rather than measured.
 - **Daemon and desktop app** — the CLI talks to the engine in-process.
-- **llama.cpp GBNF path** — `completeWithGrammar` exists; the Zod→GBNF compiler does not.
 - **Injection red-team corpus** — output-guard unit tests cover fence forgery; the full corpus does not exist.

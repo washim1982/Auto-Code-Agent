@@ -14,3 +14,11 @@ export { LlamaCppProvider } from "./llamacpp.ts";
 export { ModelRouter, type Candidate, type RouteDecision } from "./router.ts";
 export { ResidencyManager } from "./residency.ts";
 export { collectText, discoverProviders, type DiscoverOptions } from "./discover.ts";
+export { GbnfCompiler, jsonSchemaToGbnf } from "./gbnf.ts";
+export {
+  generateStructured,
+  StructuredOutputError,
+  tryParse,
+  type StructuredRequest,
+  type StructuredResult,
+} from "./structured.ts";

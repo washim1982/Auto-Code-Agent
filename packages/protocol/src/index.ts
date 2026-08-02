@@ -3,3 +3,4 @@ export * from "./plan.ts";
 export * from "./failure.ts";
 export * from "./event.ts";
 export * from "./model.ts";
+export { toJsonSchema, type JsonSchema } from "./json-schema.ts";

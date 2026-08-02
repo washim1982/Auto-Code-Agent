@@ -12,7 +12,13 @@ import { join } from "node:path";
 import { WriteSetViolation, OutputGuard } from "@aca/core";
 import { Checkpoint } from "../src/checkpoint.ts";
 import { PathEscape, resolveInWorkspace } from "../src/paths.ts";
-import { execSandboxed, scrubEnv } from "../src/sandbox/exec.ts";
+import {
+  execSandboxed,
+  resolveExecutable,
+  scrubEnv,
+  UnsafeArgument,
+  windowsSpawnArgs,
+} from "../src/sandbox/exec.ts";
 import { globToRegExp } from "../src/builtins.ts";
 import { resolvePermission, DEFAULT_MATRIX } from "../src/registry.ts";
 
@@ -288,5 +294,44 @@ describe("permission matrix", () => {
 
   it("marks git_push as ask, never allow", () => {
     expect(resolvePermission(DEFAULT_MATRIX, "coder", "git_push")).toBe("ask");
+  });
+});
+
+describe("windows batch shim handling", () => {
+  const isWin = process.platform === "win32";
+
+  it.skipIf(!isWin)("routes .cmd shims through cmd.exe rather than shell:true", () => {
+    const [exe, argv, verbatim] = windowsSpawnArgs("C:\tools\npm.cmd", ["run", "test"]);
+    expect(exe.toLowerCase()).toContain("cmd");
+    expect(argv.slice(0, 3)).toEqual(["/d", "/s", "/c"]);
+    expect(argv[3]).toBe('""C:\tools\npm.cmd" "run" "test""');
+    expect(verbatim).toBe(true);
+  });
+
+  it.skipIf(!isWin)("leaves a real executable alone", () => {
+    const [exe, argv, verbatim] = windowsSpawnArgs("C:\tools\node.exe", ["-e", "1"]);
+    expect(exe).toBe("C:\tools\node.exe");
+    expect(argv).toEqual(["-e", "1"]);
+    expect(verbatim).toBe(false);
+  });
+
+  it.skipIf(!isWin)("refuses arguments that cmd quoting cannot contain", () => {
+    // % expands variables even inside double quotes, so passing it through
+    // cmd.exe is not safely quotable — fail loudly instead of guessing.
+    expect(() => windowsSpawnArgs("npm.cmd", ["%PATH%"])).toThrow(UnsafeArgument);
+    expect(() => windowsSpawnArgs("npm.cmd", ['a"b'])).toThrow(UnsafeArgument);
+  });
+
+  it("actually runs a batch shim end to end when one exists", async () => {
+    if (!isWin) return;
+    const npm = resolveExecutable("npm");
+    if (!/\.cmd$/i.test(npm)) return; // no shim on this machine
+    const res = await execSandboxed("npm", ["--version"], {
+      cwd: root,
+      tier: "t1",
+      timeoutMs: 60_000,
+    });
+    expect(res.code).toBe(0);
+    expect(res.stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
   });
 });

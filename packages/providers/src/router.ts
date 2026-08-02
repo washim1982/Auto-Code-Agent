@@ -69,6 +69,25 @@ export class ModelRouter {
     return all;
   }
 
+  private pinned: string | null = null;
+
+  /**
+   * Restricts routing to a single model.
+   *
+   * The user pinning a model is a stronger signal than any capability score —
+   * usually they are pinning something small and warm because they do not want
+   * to wait 60s for a 17 GB model to page into VRAM. Capability filters still
+   * apply, so a pin that genuinely cannot do the job still fails loudly rather
+   * than silently producing garbage.
+   */
+  pin(modelId: string | null): void {
+    this.pinned = modelId;
+  }
+
+  get pinnedModel(): string | null {
+    return this.pinned;
+  }
+
   private breakerKey(d: ModelDescriptor): string {
     return `${d.provider}:${d.id}`;
   }
@@ -156,6 +175,7 @@ export class ModelRouter {
 
   /** Why a model cannot serve this requirement, or null if it can. */
   private rejectReason(m: ModelDescriptor, req: ModelRequirement): string | null {
+    if (this.pinned && m.id !== this.pinned) return `not the pinned model (${this.pinned})`;
     if (this.isOpen(m)) return "circuit breaker open";
     if (req.excludeModels.includes(m.id)) return "excluded by requirement";
     if (req.privacy === "local-only" && m.caps.privacyTier !== "local") {

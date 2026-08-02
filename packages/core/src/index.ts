@@ -49,3 +49,20 @@ export {
 } from "./run/supervisor.ts";
 export { WorkspaceRegistry, type WorkspaceEntry } from "./workspace/registry.ts";
 export { ChatThread, toolResultMessage, type StoredMessage } from "./chat/thread.ts";
+export { CompiledSpec, PlannedDag, PlannedNode } from "./plan/schema.ts";
+export {
+  findCycle,
+  renderProblems,
+  validatePlan,
+  type PlanProblem,
+  type ValidationResult,
+} from "./plan/validate.ts";
+export {
+  Planner,
+  PlanValidationError,
+  toPlan,
+  type PlannerOptions,
+  type PlanResult,
+  type StructuredGenerator,
+} from "./plan/planner.ts";
+export { normalizeDag, type NormalizeNote } from "./plan/normalize.ts";

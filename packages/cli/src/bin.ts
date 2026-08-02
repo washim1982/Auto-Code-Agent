@@ -5,12 +5,15 @@ import { discoverProviders, ModelRouter, ResidencyManager } from "@aca/providers
 import { c } from "./theme.ts";
 import { renderModelTable } from "./render.ts";
 import { runChat } from "./chat.ts";
+import { runPlan } from "./run.ts";
 
 const HELP = `${c.bold("aca")} — autonomous coding agent
 
 ${c.dim("USAGE")}
   aca                          chat in the current workspace
   aca chat "<question>"        one-shot question, then exit
+  aca plan "<goal>"            plan a change and show it; never executes
+  aca run "<goal>"             plan, ask for approval, then execute
   aca models                   every provider and model, with capabilities
   aca doctor                   provider health, residency, slots
   aca ws list|add <path>       workspaces
@@ -18,7 +21,9 @@ ${c.dim("USAGE")}
 ${c.dim("FLAGS")}
   --model <name>               pin a model for this session
   --local-only                 disable every cloud provider
-  --json                       machine-readable output
+  --yes                        skip the approval gate (CI)
+  --json                       machine-readable output (NDJSON events)
+  --max-tokens <n>             run budget, default 400000
   --cwd <path>                 workspace root (default: current directory)
 `;
 
@@ -65,6 +70,28 @@ async function main(argv: string[]): Promise<number> {
         localOnly,
         json,
         ...(question ? { once: question } : {}),
+      });
+    }
+
+    case "plan":
+    case "run": {
+      const goal = positional.slice(1).join(" ");
+      if (!goal) {
+        process.stderr.write(
+          c.crimson(`${command} needs a goal, e.g. aca ${command} "add tests"\n`),
+        );
+        return 1;
+      }
+      const maxTokens = Number(flags.get("max-tokens"));
+      return await runPlan({
+        root,
+        goal,
+        localOnly,
+        json,
+        yes: flags.get("yes") === true,
+        dryRun: command === "plan",
+        ...(model ? { model } : {}),
+        ...(Number.isFinite(maxTokens) && maxTokens > 0 ? { maxTokens } : {}),
       });
     }
 

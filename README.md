@@ -2,13 +2,14 @@
 
 An autonomous coding agent with an interactive CLI and a desktop app, running against local models (Ollama, LM Studio, llama.cpp) and cloud models, routed per task.
 
-**Status:** engine implemented and verified live. 95 tests passing; all 18 flow-review findings closed.
+**Status:** engine implemented and verified live. 135 tests passing; all 18 flow-review findings closed; the full goal-to-execution flow runs on local models.
 See [07 — Implementation status](docs/07-implementation-status.md).
 
 ```bash
 pnpm install && pnpm test
 node --experimental-strip-types packages/cli/src/bin.ts doctor
 node --experimental-strip-types packages/cli/src/bin.ts chat "how does auth work here?" --local-only
+node --experimental-strip-types packages/cli/src/bin.ts run "add a guard clause to divide" --local-only
 ```
 
 ## Documents
