@@ -209,6 +209,9 @@ source. **~2 days.**
 
 | | |
 |---|---|
+| `cf068ca` | The full desktop UI from the design spec — all eight views |
+| `44c6924` | Memory and probing gaps closed; clients can drive the engine |
+| `63e5345` | Project_context and Project_Progress reference docs |
 | `af302bb` | M10 desktop and M11 hardening — all 12 milestones implemented |
 | `ce12877` | M0–M9: guard, personas, reviewer, memory, daemon, Ink TUI |
 | `b7bee16` | The planner: goal to executed DAG on local models |
@@ -224,6 +227,7 @@ source. **~2 days.**
 - **Memory** — this repo indexed to 950 chunks; `cascadeInvalidate` returns its exact definition,
   "how do we stop two nodes writing the same file" returns `resource.ts`.
 - **Daemon** — every RPC exercised against a live instance.
-- **Desktop** — launcher and session views captured from a running window
-  ([design/screens](design/screens/)).
+- **Desktop** — all eight views captured from a running window against a live daemon
+  ([design/screens](design/screens/)); chat with tool calls, streaming and diffs verified over RPC.
+- **Probing** — granite4 measured at 32k real context against a 128k advertisement.
 - **Path jail** — caught a model hallucinating `/home/runner/work` mid-conversation.

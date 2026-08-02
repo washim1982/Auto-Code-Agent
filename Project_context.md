@@ -300,12 +300,20 @@ JSON-RPC 2.0 over WebSocket on loopback, token checked during the HTTP upgrade.
 daemon.status
 workspace.list|open|forget|index|status
 files.tree|read
-models.list|residency
+models.list|residency|probe|scorecards
 memory.query|lessons|forget
+chat.create|send|history
+run.plan|start|reject|cancel|active|nodes
 run.list|events|state|subscribe
+diff.forRun
+config.get|set
 approval.respond|pending
 artifact.read
 ```
+
+`run.plan` proposes without executing; `run.start` is the approval gate. Chat and runs happen in the
+daemon and stream to every attached client, which is what makes a front-end a client rather than a
+viewer.
 
 `run.state` accepts `upToSeq` — state at any point is a fold to that sequence, which is how the
 timeline scrubber works.
@@ -319,7 +327,18 @@ Electron. Main process **adopts** a running daemon rather than spawning a second
 bridge exposes exactly two functions (`daemonInfo`, `pickWorkspace`) and the renderer has no
 filesystem, no child processes, and no direct network.
 
-Views: Launcher · Session (DAG canvas) · Files · Timeline · Models · Settings.
+Eight views, all driving the engine rather than observing it:
+
+| View | What it does that nothing else can |
+|---|---|
+| **Launcher** | Index freshness per workspace — the most common reason an agent answers badly about an unfamiliar repo |
+| **Chat** | Plan cards inline; context inspector showing the live priority ladder with fenced content marked |
+| **Run graph** | DAG by dependency depth; node drawer with Context / Model / Tools / Gates / Diff |
+| **Files** | Locks, write sets, index coverage and resource epoch — agent state, not git state |
+| **Diff review** | Per-hunk rejection feeding the critique loop, with rounds remaining stated |
+| **Timeline** | Six event lanes and a playhead that folds state to any sequence point |
+| **Models** | Probed / advertised context, and a routing simulator whose *excluded* list gives reasons |
+| **Settings** | Permission matrix, privacy toggle, sandbox and budget |
 
 ---
 
