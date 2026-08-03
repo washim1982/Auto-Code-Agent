@@ -1,5 +1,5 @@
-import React from "react";
-import { fmtBytes, type TreeEntry } from "./shared.ts";
+import React, { useMemo, useState } from "react";
+import { directoriesWithChildren, fmtBytes, visibleEntries, type TreeEntry } from "./shared.ts";
 
 /**
  * File tree with the agent-state overlay.
@@ -17,11 +17,24 @@ export function FileTree({
   selected: string | null;
   onSelect: (path: string) => void;
 }): JSX.Element {
+  const [open, setOpen] = useState<Set<string>>(new Set());
+
+  const hasChildren = useMemo(() => directoriesWithChildren(entries), [entries]);
+  const visible = useMemo(() => visibleEntries(entries, open), [entries, open]);
+
+  const toggle = (path: string): void => {
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(path)) next.add(path);
+      return next;
+    });
+  };
+
   if (entries.length === 0) return <div className="empty">No files.</div>;
 
   return (
     <div className="ftree">
-      {entries.map((e) => (
+      {visible.map((e) => (
         <div
           key={e.path}
           className={`fr${selected === e.path ? " on" : ""}`}
@@ -31,10 +44,14 @@ export function FileTree({
             // retrieve it, which is worth seeing at a glance.
             opacity: e.kind === "file" && !e.indexed ? 0.45 : 1,
           }}
-          onClick={() => e.kind === "file" && onSelect(e.path)}
+          onClick={() => (e.kind === "dir" ? toggle(e.path) : onSelect(e.path))}
         >
           <span className="nm">
-            {e.kind === "dir" ? "▸ " : ""}
+            {e.kind === "dir" && (
+              <span className={`cv${open.has(e.path) ? " open" : ""}`}>
+                {hasChildren.has(e.path) ? "▸" : ""}
+              </span>
+            )}
             {e.name}
           </span>
           {e.lockedBy && (

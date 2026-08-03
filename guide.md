@@ -298,6 +298,16 @@ its own tool calls, so the model can see the results it already has. If you stil
 model, that model is ignoring the binding; the loop now stops after six rounds and forces an answer
 rather than hanging.
 
+**A tool result is marked `fenced`.** Not a problem. Every tool result is wrapped in an
+untrusted-data envelope before the model sees it, and the model is told to treat the contents as
+data rather than instructions. It is on all of them.
+
+**A tool result shows a red "tried to break out of its fence" warning.** This one is worth reading.
+The content contained our envelope's own end marker, which only happens deliberately — something in
+that file or command output was trying to end the quoting early so the text after it would be read
+as trusted instructions. It was neutralised, and the model saw the escaped form. Look at what the
+tool actually read.
+
 **Retrieval returns irrelevant chunks.** Expected for conceptual queries with a general-purpose
 embedding model. Identifier searches are much sharper — search for the symbol, not the concept.
 

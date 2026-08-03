@@ -10,6 +10,47 @@ export interface TreeEntry {
   sizeBytes: number;
 }
 
+/**
+ * Drops everything beneath a collapsed directory.
+ *
+ * The listing arrives as a flat pre-order walk carrying depth, so one pass is
+ * enough: on a closed directory, skip forward until the depth returns to its
+ * own level. `open` holds directory paths, so an unknown directory is closed —
+ * which is what makes a freshly opened workspace show its top level rather
+ * than several thousand rows.
+ */
+export function visibleEntries(entries: TreeEntry[], open: Set<string>): TreeEntry[] {
+  const out: TreeEntry[] = [];
+  let hideBelow: number | null = null;
+
+  for (const e of entries) {
+    if (hideBelow !== null) {
+      if (e.depth > hideBelow) continue;
+      hideBelow = null;
+    }
+    out.push(e);
+    if (e.kind === "dir" && !open.has(e.path)) hideBelow = e.depth;
+  }
+  return out;
+}
+
+/**
+ * Directories that actually have something to show.
+ *
+ * The walk stops at a depth limit and skips ignored directories, so plenty of
+ * entries have no children in the listing. They get no caret rather than one
+ * that does nothing when clicked.
+ */
+export function directoriesWithChildren(entries: TreeEntry[]): Set<string> {
+  const set = new Set<string>();
+  for (let i = 0; i < entries.length; i++) {
+    const current = entries[i]!;
+    const next = entries[i + 1];
+    if (current.kind === "dir" && next && next.depth > current.depth) set.add(current.path);
+  }
+  return set;
+}
+
 export interface ModelRow {
   provider: string;
   id: string;

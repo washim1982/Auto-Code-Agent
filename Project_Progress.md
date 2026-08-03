@@ -134,6 +134,9 @@ the event log.
 | Thinking from six rounds piled into one unresolving bubble | Same cause — nothing cleared `streaming` between rounds | Intermediate rounds commit their turn, which clears it |
 | Each message appeared twice in the desktop chat | The renderer appended the user turn optimistically *and* rendered the daemon's echo | The daemon is the single source of truth; `run.plan` now echoes the turn too, so the plan path still shows it |
 | A model that writes `{"name": …}` as prose had it rendered as its answer | Advertised `tools: "native"`, so the shim never engaged and nobody parsed the text form | Salvage a text-shaped call when no native one arrives; `extractCall` scans balanced objects so two calls on two lines still parse |
+| File tree showed every directory expanded, with a `▸` on each that did nothing | The caret was decorative; there was no collapse state anywhere | Real open/closed state, one-pass depth filtering, no caret on a directory the walk never entered |
+| Model replies rendered `##`, `**` and pipe-tables as literal text | `.msg` was `white-space: pre-wrap` over a raw string — nothing parsed Markdown | A small parser and renderer, built from a tree so model output can never become markup; `javascript:` and `data:` hrefs render inert |
+| Every tool result carried a crimson "fenced as untrusted" banner, read as an error | Routine fencing was styled with the palette's failure colour, so the one thing worth alarming about looked identical to the 99% that was not | Routine case is a slate `fenced` badge; crimson is now reserved for `forgeryNeutralised` — content that actually tried to close its own envelope |
 
 ---
 

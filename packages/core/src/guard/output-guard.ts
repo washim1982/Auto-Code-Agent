@@ -8,6 +8,14 @@ export interface GuardedOutput {
   trust: "untrusted";
   artifact?: { id: string; path: string; bytes: number; sha256: string };
   truncated: boolean;
+  /**
+   * The content tried to close our envelope from the inside.
+   *
+   * Fencing happens to every tool result, so on its own it says nothing about
+   * the content. This does: it is the one signal worth raising, and keeping it
+   * separate is what stops the routine case being dressed as an alarm.
+   */
+  forgeryNeutralised: boolean;
 }
 
 export interface OutputGuardOptions {
@@ -69,9 +77,15 @@ export class OutputGuard {
     nodeId: string | null,
   ): Promise<GuardedOutput> {
     const bytes = Buffer.byteLength(raw, "utf8");
+    const forgeryNeutralised = hasFenceForgery(raw, this.nonce);
 
     if (bytes <= this.spillBytes) {
-      return { text: this.fence(raw, label), trust: "untrusted", truncated: false };
+      return {
+        text: this.fence(raw, label),
+        trust: "untrusted",
+        truncated: false,
+        forgeryNeutralised,
+      };
     }
 
     const sha256 = createHash("sha256").update(raw).digest("hex");
@@ -101,8 +115,17 @@ export class OutputGuard {
       trust: "untrusted",
       artifact: { id, path, bytes, sha256 },
       truncated: true,
+      forgeryNeutralised,
     };
   }
+}
+
+/** Whether the content carries our end marker, i.e. tried to break out. */
+export function hasFenceForgery(content: string, nonce: string): boolean {
+  return (
+    content.includes(`<<<END_UNTRUSTED_DATA ${nonce}>>>`) ||
+    content.includes(`<<<UNTRUSTED_DATA ${nonce}`)
+  );
 }
 
 /**

@@ -233,6 +233,7 @@ export class SessionManager {
             name: call.name,
             preview: raw.slice(0, 400),
             untrusted: true,
+            forgery: guarded.forgeryNeutralised,
           }),
         );
       }

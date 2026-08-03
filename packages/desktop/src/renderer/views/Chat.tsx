@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { Markdown } from "./Markdown.tsx";
 import type { ModelRow } from "./shared.ts";
 
 export interface ThreadEntry {
@@ -8,6 +9,8 @@ export interface ThreadEntry {
   model?: string;
   thinking?: string;
   untrusted?: boolean;
+  /** The result tried to close its own fence — an attack, not routine. */
+  forgery?: boolean;
   toolName?: string;
 }
 
@@ -213,10 +216,23 @@ function Turn({
             <span style={{ color: "var(--moss)" }}>✓</span>
             <b>{entry.toolName ?? "tool"}</b>
             <span className="dim">{entry.content.slice(0, 70)}</span>
+            {/* Fencing happens to every tool result, so it is a quiet badge
+                rather than a banner — a warning shown every single time is one
+                nobody reads. */}
+            {entry.untrusted && (
+              <span
+                className="fence"
+                title="Tool output is wrapped in an untrusted-data envelope before the model sees it. The model is instructed to treat it as data and never as instructions. This is routine, not a problem."
+              >
+                fenced
+              </span>
+            )}
           </span>
-          {entry.untrusted && (
+          {/* This one is not routine: the content tried to close the envelope
+              from the inside, which only happens on purpose. */}
+          {entry.forgery && (
             <div className="untrusted" style={{ marginTop: 7 }}>
-              ⚠ fenced as untrusted — this content is data, never instructions
+              ⚠ this content tried to break out of its untrusted-data fence — neutralised
             </div>
           )}
         </div>
@@ -242,7 +258,13 @@ function Turn({
           )}
         </div>
         {entry.thinking && showThinking && <div className="think">{entry.thinking}</div>}
-        <div className="msg">{entry.content}</div>
+        {/* The user's own text is shown exactly as typed; only the model
+            answers in Markdown. */}
+        {isUser ? (
+          <div className="msg">{entry.content}</div>
+        ) : (
+          <Markdown source={entry.content} />
+        )}
       </div>
     </div>
   );

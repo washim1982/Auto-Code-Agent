@@ -148,6 +148,7 @@ export function App(): JSX.Element {
             toolName: String(p["name"]),
             content: String(p["preview"] ?? "").slice(0, 120),
             untrusted: true,
+            forgery: Boolean(p["forgery"]),
           },
         ]);
       } else if (method === "run.proposed") {
