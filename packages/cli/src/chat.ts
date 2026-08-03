@@ -139,6 +139,10 @@ export async function runChat(options: ChatOptions): Promise<number> {
       ...thread.toChatMessages(),
     ];
 
+    // Small models re-issue an identical call rather than answer from the
+    // result they already hold. Telling them so is what breaks the loop.
+    const seenCalls = new Set<string>();
+
     // Bounded tool loop — a model that keeps calling tools must still terminate.
     for (let step = 0; step < 6; step++) {
       meter.check();
@@ -179,19 +183,32 @@ export async function runChat(options: ChatOptions): Promise<number> {
         return;
       }
 
-      messages.push({ role: "assistant", content: text });
+      // Carries its own calls: a tool message binds to them, and without that
+      // the model never sees its own output and repeats the call.
+      messages.push({ role: "assistant", content: text, toolCalls: calls });
+      thread.append({ role: "assistant", content: text }, { toolCalls: calls });
 
       for (const call of calls) {
         const tool = tools.get(call.name);
+        const record = (content: string): void => {
+          messages.push({ role: "tool", content, toolCallId: call.id, name: call.name });
+          thread.append({ role: "tool", content }, { toolCallId: call.id, name: call.name });
+        };
+
         if (!tool || !allowed.some((t) => t.name === call.name)) {
-          messages.push({
-            role: "tool",
-            content: `tool ${call.name} is not permitted in chat (read-only)`,
-            toolCallId: call.id,
-            name: call.name,
-          });
+          record(`tool ${call.name} is not permitted in chat (read-only)`);
           continue;
         }
+
+        const signature = `${call.name}:${JSON.stringify(call.args)}`;
+        if (seenCalls.has(signature)) {
+          record(
+            `You already called ${call.name} with these exact arguments and have the result above. ` +
+              `Do not call it again. Answer the question with what you have.`,
+          );
+          continue;
+        }
+        seenCalls.add(signature);
 
         if (!options.json) {
           process.stdout.write(
@@ -217,16 +234,30 @@ export async function runChat(options: ChatOptions): Promise<number> {
         // model. Chat is not an exception to that.
         const guarded = await guard.guard(raw, call.name, "chat", null);
         events.append("chat", "guard.fenced", { tool: call.name, bytes: raw.length });
-        messages.push({
-          role: "tool",
-          content: guarded.text,
-          toolCallId: call.id,
-          name: call.name,
-        });
+        record(guarded.text);
       }
     }
 
-    if (!options.json) process.stdout.write(c.wheat("tool loop cap reached\n"));
+    // Out of steps with the model still asking for tools. One tool-less call
+    // turns a dead end into an answer.
+    messages.push({
+      role: "user",
+      content:
+        "Stop calling tools and answer now, using only what you have gathered above. " +
+        "If it is not enough, say what you found and what is still missing.",
+    });
+    let forced = "";
+    const provider = router.provider(chosen.provider)!;
+    for await (const chunk of provider.chat({ model: chosen.id, messages, maxTokens: 1500 })) {
+      if (chunk.type === "text") {
+        forced += chunk.delta;
+        if (!options.json) process.stdout.write(chunk.delta);
+      } else if (chunk.type === "usage") {
+        meter.add(chunk.inputTokens + chunk.outputTokens, chunk.costUsd);
+      }
+    }
+    if (!options.json) process.stdout.write("\n");
+    thread.append({ role: "assistant", content: forced });
   };
 
   if (options.once) {

@@ -58,20 +58,31 @@ export type ModelRequirement = z.infer<typeof ModelRequirement>;
 
 export const ChatRole = z.enum(["system", "user", "assistant", "tool"]);
 
-export const ChatMessage = z.object({
-  role: ChatRole,
-  content: z.string(),
-  toolCallId: z.string().optional(),
-  name: z.string().optional(),
-});
-export type ChatMessage = z.infer<typeof ChatMessage>;
-
 export const ToolCall = z.object({
   id: z.string(),
   name: z.string(),
   args: z.record(z.unknown()),
 });
 export type ToolCall = z.infer<typeof ToolCall>;
+
+export const ChatMessage = z.object({
+  role: ChatRole,
+  content: z.string(),
+  toolCallId: z.string().optional(),
+  name: z.string().optional(),
+  /**
+   * The calls an assistant turn requested.
+   *
+   * Every provider API requires the assistant turn to carry its own tool calls
+   * before a `tool` message answering them means anything: OpenAI binds on
+   * `tool_call_id`, Anthropic on `tool_use_id`, Ollama on position. Omitting
+   * this drops the link between a call and its result, so the model cannot see
+   * that it already ran the tool — and it calls it again, every round, until
+   * the step budget is gone.
+   */
+  toolCalls: z.array(ToolCall).optional(),
+});
+export type ChatMessage = z.infer<typeof ChatMessage>;
 
 export type ChatChunk =
   | { type: "thinking"; delta: string }

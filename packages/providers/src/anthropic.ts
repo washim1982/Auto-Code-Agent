@@ -125,13 +125,35 @@ export class AnthropicProvider implements ModelProvider {
       model: req.model,
       max_tokens: req.maxTokens ?? 4096,
       stream: true,
-      messages: rest.map((m) => ({
-        role: m.role === "tool" ? "user" : m.role,
-        content:
-          m.role === "tool"
-            ? [{ type: "tool_result", tool_use_id: m.toolCallId ?? "", content: m.content }]
-            : m.content,
-      })),
+      messages: rest.map((m) => {
+        if (m.role === "tool") {
+          return {
+            role: "user",
+            content: [
+              { type: "tool_result", tool_use_id: m.toolCallId ?? "", content: m.content },
+            ],
+          };
+        }
+        // A tool_result is rejected outright unless a tool_use block with the
+        // same id precedes it, so an assistant turn that called tools has to be
+        // rebuilt as blocks. An empty text block is itself invalid, hence the
+        // filter rather than an unconditional pair.
+        if (m.toolCalls?.length) {
+          return {
+            role: m.role,
+            content: [
+              ...(m.content.trim() ? [{ type: "text", text: m.content }] : []),
+              ...m.toolCalls.map((c) => ({
+                type: "tool_use",
+                id: c.id,
+                name: c.name,
+                input: c.args,
+              })),
+            ],
+          };
+        }
+        return { role: m.role, content: m.content };
+      }),
     };
 
     if (system.length > 0) {

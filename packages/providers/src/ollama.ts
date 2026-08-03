@@ -103,7 +103,21 @@ export class OllamaProvider implements ModelProvider {
   async *chat(req: ChatRequest, signal?: AbortSignal): AsyncIterable<ChatChunk> {
     const body: Record<string, unknown> = {
       model: req.model,
-      messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
+      messages: req.messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+        // Ollama matches a tool result to its call by name, and needs the
+        // assistant turn to carry the call at all. Dropping either leaves the
+        // model blind to its own tool output.
+        ...(m.role === "tool" && m.name ? { tool_name: m.name, name: m.name } : {}),
+        ...(m.toolCalls?.length
+          ? {
+              tool_calls: m.toolCalls.map((c) => ({
+                function: { name: c.name, arguments: c.args },
+              })),
+            }
+          : {}),
+      })),
       stream: true,
       options: {
         ...(req.temperature != null ? { temperature: req.temperature } : {}),

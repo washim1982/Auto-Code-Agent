@@ -38,7 +38,7 @@ export class ToolCallShim {
 
     const messages: ChatMessage[] = [
       { role: "system", content: renderToolPrompt(req.tools) },
-      ...req.messages,
+      ...req.messages.map(flattenForPrompt),
     ];
 
     // Buffer text so a call can be recognised only once complete; emitting a
@@ -74,6 +74,30 @@ export class ToolCallShim {
   }
 }
 
+/**
+ * Renders the native tool protocol back into plain text.
+ *
+ * A shimmed model has no `tool_calls` field and no `tool` role — it only ever
+ * sees prose. Passing the structured form through would show it an assistant
+ * turn with empty content followed by an unexplained tool message, which is
+ * precisely the history it needs in order not to repeat the call.
+ */
+export function flattenForPrompt(m: ChatMessage): ChatMessage {
+  if (m.role === "tool") {
+    return { role: "user", content: `Result of ${m.name ?? "tool"}:\n${m.content}` };
+  }
+  if (m.toolCalls?.length) {
+    const rendered = m.toolCalls
+      .map((c) => `${CALL_OPEN}${JSON.stringify({ name: c.name, arguments: c.args })}${CALL_CLOSE}`)
+      .join("\n");
+    return {
+      role: m.role,
+      content: m.content.trim() ? `${m.content}\n${rendered}` : rendered,
+    };
+  }
+  return m;
+}
+
 export function renderToolPrompt(
   tools: { name: string; description: string; schema: unknown }[],
 ): string {
@@ -103,7 +127,9 @@ export function extractCall(
   text: string,
 ): { name: string; args: Record<string, unknown> } | null {
   const tagged = new RegExp(`${CALL_OPEN}([\\s\\S]*?)${CALL_CLOSE}`).exec(text);
-  const candidates = [tagged?.[1], text];
+  // Bare objects are scanned last and one at a time: a model that emits two
+  // calls on two lines parses as neither when the whole reply is tried at once.
+  const candidates = [tagged?.[1], text, ...scanObjects(text)];
 
   for (const candidate of candidates) {
     if (!candidate) continue;
@@ -119,6 +145,38 @@ export function extractCall(
     };
   }
   return null;
+}
+
+/** Every balanced `{…}` span in a string, outermost first, in order. */
+function scanObjects(text: string): string[] {
+  const found: string[] = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{") {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === "}") {
+      depth--;
+      if (depth === 0 && start >= 0) {
+        found.push(text.slice(start, i + 1));
+        start = -1;
+      }
+      if (depth < 0) depth = 0;
+    }
+  }
+  return found;
 }
 
 /** Wraps a provider when the model's measured tool support needs it. */

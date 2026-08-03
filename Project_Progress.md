@@ -129,6 +129,11 @@ the event log.
 | Desktop loaded `dist/main/dist/renderer/index.html` | `app.getAppPath()` returns the entry script's directory under `electron dist/main/index.cjs` | Resolve from `__dirname` |
 | Critique dedup missed "it leaks memory" vs "will leak memory" | No stemming, so the reviewer could ping-pong on one objection | Suffix stripper before hashing |
 | Cached `grep src/**` survived a write to `src/mw/x.ts` | Glob resources were never registered in the epoch table | Register read resources at cache-write time |
+| Chat called `list_dir "."` eight times and never answered | `ChatMessage` had nowhere to put the assistant's tool calls, so every adapter sent a `tool` result bound to nothing. Providers drop an unbound result, so the model could not see that the tool had already run. | `toolCalls` on `ChatMessage`, emitted as `tool_calls` (OpenAI/Ollama) and `tool_use` blocks (Anthropic) |
+| …and the answer never appeared in the desktop app | The step cap `break`s without broadcasting `chat.turn`, and that notification is the only thing that clears the client's streaming bubble | Every exit path settles through one function; exhausting the cap forces one tool-less answer |
+| Thinking from six rounds piled into one unresolving bubble | Same cause — nothing cleared `streaming` between rounds | Intermediate rounds commit their turn, which clears it |
+| Each message appeared twice in the desktop chat | The renderer appended the user turn optimistically *and* rendered the daemon's echo | The daemon is the single source of truth; `run.plan` now echoes the turn too, so the plan path still shows it |
+| A model that writes `{"name": …}` as prose had it rendered as its answer | Advertised `tools: "native"`, so the shim never engaged and nobody parsed the text form | Salvage a text-shaped call when no native one arrives; `extractCall` scans balanced objects so two calls on two lines still parse |
 
 ---
 

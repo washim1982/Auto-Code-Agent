@@ -107,6 +107,18 @@ export class OpenAiCompatProvider implements ModelProvider {
         content: m.content,
         ...(m.toolCallId ? { tool_call_id: m.toolCallId } : {}),
         ...(m.name ? { name: m.name } : {}),
+        // A `tool` message is only bindable if the assistant turn before it
+        // declared the call. Without this the server drops the result and the
+        // model re-issues the same call forever.
+        ...(m.toolCalls?.length
+          ? {
+              tool_calls: m.toolCalls.map((c) => ({
+                id: c.id,
+                type: "function",
+                function: { name: c.name, arguments: JSON.stringify(c.args) },
+              })),
+            }
+          : {}),
       })),
       stream: true,
       stream_options: { include_usage: true },

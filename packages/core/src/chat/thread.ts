@@ -76,14 +76,34 @@ export class ChatThread {
     return row?.["model"] == null ? null : String(row["model"]);
   }
 
-  /** Renders the thread as provider-shaped messages. */
+  /**
+   * Renders the thread as provider-shaped messages.
+   *
+   * Tool calls are dropped unless their results are also in the thread. A
+   * dangling call is rejected outright by Anthropic and silently confuses the
+   * OpenAI-compatible servers, so one interrupted turn would otherwise poison
+   * every later turn in the conversation.
+   */
   toChatMessages(): ChatMessage[] {
-    return this.messages().map((m) => ({
-      role: m.role,
-      content: m.content,
-      ...(m.meta["toolCallId"] ? { toolCallId: String(m.meta["toolCallId"]) } : {}),
-      ...(m.meta["name"] ? { name: String(m.meta["name"]) } : {}),
-    }));
+    const stored = this.messages();
+    const answered = new Set(
+      stored
+        .filter((m) => m.role === "tool" && m.meta["toolCallId"])
+        .map((m) => String(m.meta["toolCallId"])),
+    );
+
+    return stored.map((m) => {
+      const calls = (m.meta["toolCalls"] as ToolCall[] | undefined)?.filter((c) =>
+        answered.has(c.id),
+      );
+      return {
+        role: m.role,
+        content: m.content,
+        ...(m.meta["toolCallId"] ? { toolCallId: String(m.meta["toolCallId"]) } : {}),
+        ...(m.meta["name"] ? { name: String(m.meta["name"]) } : {}),
+        ...(calls?.length ? { toolCalls: calls } : {}),
+      };
+    });
   }
 }
 

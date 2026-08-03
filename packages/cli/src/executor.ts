@@ -238,7 +238,8 @@ ${r.content}`,
       }
 
       if (calls.length === 0) break;
-      messages.push({ role: "assistant", content: text });
+      // Carries its own calls so the tool results below can bind to them.
+      messages.push({ role: "assistant", content: text, toolCalls: calls });
 
       for (const call of calls) {
         const tool = options.registry.get(call.name);

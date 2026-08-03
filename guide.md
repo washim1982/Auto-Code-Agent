@@ -94,6 +94,29 @@ closing the app does not kill a run.
 
 ---
 
+## Chat reads, runs write
+
+Chat can only read. It gets four tools — `read_file`, `list_dir`, `glob`, `grep` — which is why the
+desktop app shows **`tools read-only`** next to the model picker. That is the design, not a
+misconfiguration or a setting to flip.
+
+Writing goes through a run, because a run is what carries the machinery that makes writing safe: a
+declared write set, an approval gate, checkpoints, rollback, gates and review. Chat has none of that,
+so giving it `write_file` would mean edits with no record and no way back.
+
+Escalating is just a matter of asking for the change rather than asking about the code:
+
+| You type | What happens |
+| --------- | ------------- |
+| "how does the router pick a model?" | Chat answers, read-only |
+| "add a retry to the upload endpoint" | A plan appears; approve it and it becomes a run |
+
+The desktop app routes on the wording of your message, so a verb like _add_, _fix_, _rename_ or
+_refactor_ is what triggers a plan. From the CLI it is explicit: `aca chat` never writes,
+`aca run` does.
+
+---
+
 ## Command reference
 
 ### Asking and doing
@@ -269,6 +292,11 @@ dependency graph.
 
 **The agent invents file paths that do not exist.** The index is stale or missing. Run
 `aca memory index`.
+
+**It calls the same tool over and over instead of answering.** Fixed — the assistant turn now carries
+its own tool calls, so the model can see the results it already has. If you still see it on some
+model, that model is ignoring the binding; the loop now stops after six rounds and forces an answer
+rather than hanging.
 
 **Retrieval returns irrelevant chunks.** Expected for conceptual queries with a general-purpose
 embedding model. Identifier searches are much sharper — search for the symbol, not the concept.

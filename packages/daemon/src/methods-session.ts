@@ -60,7 +60,12 @@ export function registerSessionMethods(deps: SessionMethodDeps): SessionManager 
 
   daemon.method("run.plan", async (params) => {
     const services = await get(String(params["path"] ?? process.cwd()));
-    return await sessions.plan(services, String(params["goal"] ?? ""), broadcast);
+    return await sessions.plan(
+      services,
+      String(params["goal"] ?? ""),
+      broadcast,
+      String(params["threadId"] ?? "default"),
+    );
   });
 
   daemon.method(

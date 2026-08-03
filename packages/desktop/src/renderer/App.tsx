@@ -111,15 +111,22 @@ export function App(): JSX.Element {
         }));
       } else if (method === "chat.turn") {
         const role = String(p["role"]) as ThreadEntry["role"];
+        const content = String(p["content"] ?? "");
+        const thinking = String(p["thinking"] ?? "");
+        // Always clears the live bubble — this is the only thing that does, so
+        // missing it leaves the UI streaming forever.
         setStreaming(null);
+        // A round that only called tools has no prose; rendering it would put
+        // an empty assistant bubble above every tool chip.
+        if (!content && !thinking) return;
         setThread((t) => [
           ...t,
           {
             id: `${Date.now()}-${t.length}`,
             role,
-            content: String(p["content"] ?? ""),
+            content,
             ...(p["model"] ? { model: String(p["model"]) } : {}),
-            ...(p["thinking"] ? { thinking: String(p["thinking"]) } : {}),
+            ...(thinking ? { thinking } : {}),
           },
         ]);
       } else if (method === "chat.tool") {
@@ -285,7 +292,8 @@ export function App(): JSX.Element {
       const root = rootRef.current;
       if (!root) return;
       setBusy(true);
-      setThread((t) => [...t, { id: `${Date.now()}-u`, role: "user", content: text }]);
+      // Not appended locally: the daemon echoes the turn to every client, and
+      // doing both showed each message twice.
 
       try {
         // Keyword intent, deliberately crude: classifying with a model costs a
@@ -296,7 +304,7 @@ export function App(): JSX.Element {
             text,
           )
         ) {
-          await client.call("run.plan", { path: root, goal: text });
+          await client.call("run.plan", { path: root, threadId, goal: text });
         } else {
           await client.call("chat.send", { path: root, threadId, text, model: activeModel });
           setBusy(false);
