@@ -191,6 +191,21 @@ RPC methods and a composer. **~2 days.**
 **6. Exercise the Docker T2 sandbox.** Defined and reachable but never run. On Windows it is the only
 real isolation boundary, so "untested" is a meaningful gap. **~half a day.**
 
+### Interactive CLI — done
+
+The TUI now runs what it plans. It used to stop at the approval and print "run `aca run` to
+execute", which meant the one surface built around the DAG could not drive one. It also gained the
+pre-flight checklist, the `v`/`d`/`l`/`?` keys, live per-node model and elapsed time, streamed
+replies, and `esc` cancelling a run rather than only a chat turn.
+
+The supervisor assembly moved into `packages/cli/src/supervisor.ts`. There were three hand-written
+copies of it — and its two-phase construction is precisely what made the budget meter inert twice.
+`aca run` and the TUI now share one; the daemon still has its own.
+
+Found while doing it: the TUI chat loop had the same unbound tool-result defect as every other
+front-end, and the status strip's `flexGrow` spacer had no parent width, so the hint collided with
+the elapsed counter and printed `0stab focus`.
+
 ### Packaging — done
 
 `pnpm --filter auto-code-agent dist` produces a Windows NSIS installer and a portable exe. The engine

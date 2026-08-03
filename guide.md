@@ -66,21 +66,36 @@ aca run "add retry logic to the upload endpoint"     # plans, asks, executes
 
 ### Interactive TUI — `aca` with no arguments
 
-Opens a full-screen session in your terminal.
+A full-screen session in your terminal. Ask a question and it answers; describe a change and it
+plans, asks, then **executes** — the DAG updates in place as nodes run, with the model and elapsed
+time per node.
 
 | Key                | Does                                                       |
 | ------------------ | ---------------------------------------------------------- |
 | `Enter`            | Send                                                       |
 | `Tab`              | Cycle focus: input → graph → node                          |
 | `g` / `t`          | Graph view / thread view _(when focus has left the input)_ |
+| `v`                | Plan detail — every node, persona and write set            |
+| `d` / `l`          | Focused node's diff / model log                            |
 | `T`                | Toggle thinking tokens                                     |
 | `↑` `↓` or `j` `k` | Move between nodes                                         |
 | `a` / `A` / `r`    | Approve once / approve for run / reject                    |
-| `Esc`              | Cancel a running task, or quit                             |
+| `?`                | Key help                                                   |
+| `Esc`              | Cancel — the run is checkpointed, not discarded            |
+
+Before any node runs you get the pre-flight checklist, so a long wait says what it is doing:
+
+```
+✓ guard      no secrets, no injection, in scope
+✓ spec       4 acceptance criteria
+✓ preflight  9 tools, 1 requires approval
+✓ plan       2 nodes, 2 branches · qwen3.6:35b
+```
 
 Slash commands: `/model <name>` · `/index` · `/lessons` · `/help`
 
-Use `--plain` if your terminal cannot handle full-screen rendering.
+Use `--plain` if your terminal cannot handle full-screen rendering. It also falls back automatically
+when stdout is not a terminal, so piping to a file still works.
 
 ### Desktop app — the most complete surface
 
@@ -361,9 +376,6 @@ exercised.
 **The reviewer needs a second model.** It deliberately refuses to review with the same model that
 wrote the code. If only one model qualifies for a node, review is skipped and the node passes on
 gates alone. Have two models available if you want review to actually happen.
-
-**The TUI plans but does not execute.** Ask it for work and it will produce a plan, then hand you
-off to `aca run`. Use the desktop app or the CLI for the complete path.
 
 **Lessons need two occurrences.** The agent records a lesson the first time something fails but only
 _uses_ it after the same failure happens again. Early on, `aca memory lessons` will show entries

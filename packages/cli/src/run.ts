@@ -1,21 +1,13 @@
 import { createInterface } from "node:readline/promises";
-import {
-  InputGuard,
-  MemoryWriteback,
-  Planner,
-  PlanValidationError,
-  RunSupervisor,
-  type SupervisorHooks,
-} from "@aca/core";
+import { InputGuard, Planner, PlanValidationError } from "@aca/core";
 import { workspaceMap } from "@aca/tools";
-import type { Plan, PlanNode } from "@aca/protocol";
+import type { Plan } from "@aca/protocol";
 import { c } from "./theme.ts";
 import { renderDag } from "./render.ts";
 import { renderPlanCard } from "./plan-card.ts";
 import { makeGenerator } from "./generator.ts";
-import { makeExecutor } from "./executor.ts";
 import { Progress } from "./progress.ts";
-import { makeReviewer } from "./reviewer.ts";
+import { buildRunner, reply } from "./supervisor.ts";
 import { openWorkspace } from "./workspace-service.ts";
 
 export interface PlanRunOptions {
@@ -46,7 +38,9 @@ export async function runPlan(options: PlanRunOptions): Promise<number> {
     ...(options.localOnly ? { localOnly: true } : {}),
     ...(options.model ? { pinnedModel: options.model } : {}),
   });
-  const { db, events, cache, guard, tools, router, residency, personas, memory } = services;
+  // The rest of the bundle is wired by `buildRunner`, which is the one place
+  // the supervisor and its executor get assembled.
+  const { events, router } = services;
   const ws = { name: services.name, id: services.workspaceId };
 
   const catalogue = await router.catalogue(true);
@@ -96,13 +90,10 @@ export async function runPlan(options: PlanRunOptions): Promise<number> {
     }
   }
 
-  const nodeModels = new Map<string, string>();
-
   // Give the planner the real tree; without it, it invents plausible paths and
   // every node's write set then fails enforcement at execution time.
   const map = workspaceMap(options.root, { maxFiles: 220, maxDepth: 4 });
   const planner = new Planner(makeGenerator(router), { workspaceMap: map });
-  void memory;
 
   const progress = new Progress(!options.json && process.stdout.isTTY === true);
 
@@ -185,85 +176,35 @@ export async function runPlan(options: PlanRunOptions): Promise<number> {
 
   events.append(runId, "plan.approved", { planId: result.plan.id });
 
-  // The executor needs the supervisor's meter and the supervisor needs the
-  // executor, so the indirection is deliberate: they must share ONE meter or
-  // the budget never sees real usage and F15 is inert in the live path.
-  let execute: SupervisorHooks["executeNode"] | null = null;
+  /** One prompt shape for both gates, so they cannot drift apart. */
+  const ask = async (title: string, summary: string, detail: string): Promise<boolean> => {
+    if (options.yes) return false;
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    process.stdout.write(
+      `\n${c.wheat(title)}  ${c.bold(summary)}\n  ${c.dim(detail)}\n`,
+    );
+    const a = (await rl.question(c.wheat("[a] approve  [r] reject "))).trim().toLowerCase();
+    rl.close();
+    return a === "a";
+  };
 
-  const supervisor = new RunSupervisor(
-    db,
-    events,
-    {
-      executeNode: (node, token) => {
-        if (!execute) throw new Error("executor not initialised");
-        return execute(node, token);
-      },
-      writeback: new MemoryWriteback(memory),
-      review: makeReviewer({
-        root: options.root,
-        runId,
-        router,
-        events,
-        personas,
-        localOnly: options.localOnly ?? false,
-        coderModelFor: (nodeId) => nodeModels.get(nodeId),
-      }),
-      rollback: async (node: PlanNode) => {
-        events.append(runId, "node.rolled_back", { nodeId: node.id }, node.id);
-      },
-      requestApproval: async (approval) => {
-        if (options.yes) {
-          return { approvalId: approval.id, granted: false, scope: "once", reason: "--yes" };
-        }
-        const rl = createInterface({ input: process.stdin, output: process.stdout });
-        process.stdout.write(
-          `\n${c.wheat("⚠ node needs a decision")}  ${c.bold(approval.summary)}\n  ${c.dim(approval.detail)}\n`,
-        );
-        const a = (await rl.question(c.wheat("[a] approve  [r] reject "))).trim().toLowerCase();
-        rl.close();
-        return {
-          approvalId: approval.id,
-          granted: a === "a",
-          scope: "once" as const,
-          reason: "",
-        };
-      },
-    },
-    {
-      maxAttempts: 2,
-      maxReviewRounds: 3,
-      // Width is clamped by provider slots, not CPU count.
-      concurrency: Math.max(1, Math.min(await residency.totalSlots(), 3)),
-      budget: { maxTokens: options.maxTokens ?? 400_000, maxWallMs: 30 * 60_000 },
-    },
-  );
-
-  execute = makeExecutor({
-    root: options.root,
+  const supervisor = await buildRunner({
+    services,
     runId,
-    router,
-    registry: tools,
-    events,
-    cache,
-    guard,
-    localOnly: options.localOnly ?? false,
-    meter: supervisor.meter,
-    personas,
-    memory,
-    onRoute: (nodeId, model) => nodeModels.set(nodeId, model),
-    verbose: !options.json,
-    requestApproval: async (summary, detail) => {
-      // F13: irreversible actions ask at execution time regardless of the
-      // plan-level approval already granted.
-      if (options.yes) return false;
-      const rl = createInterface({ input: process.stdin, output: process.stdout });
-      process.stdout.write(
-        `\n${c.wheat("⚠ approval required")}  ${c.bold(summary)}\n  ${c.dim(detail)}\n`,
-      );
-      const a = (await rl.question(c.wheat("[a] approve  [r] reject "))).trim().toLowerCase();
-      rl.close();
-      return a === "a";
-    },
+    ...(options.localOnly ? { localOnly: true } : {}),
+    ...(options.maxTokens ? { maxTokens: options.maxTokens } : {}),
+    ...(options.json ? {} : { verbose: true }),
+    requestApproval: async (approval) =>
+      reply(
+        approval,
+        await ask("⚠ node needs a decision", approval.summary, approval.detail),
+        "once",
+        options.yes ? "--yes" : "",
+      ),
+    // F13: irreversible actions ask at execution time regardless of the
+    // plan-level approval already granted.
+    requestIrreversible: async (summary, detail) =>
+      await ask("⚠ approval required", summary, detail),
   });
 
   // esc / ctrl-c cancels and checkpoints, rather than discarding (F14).

@@ -34,6 +34,49 @@ export interface NodeMeta {
   detail?: string;
 }
 
+export interface Stage {
+  id: string;
+  label: string;
+  detail: string;
+  state: "pending" | "running" | "done" | "failed";
+}
+
+/**
+ * The pre-flight checklist from docs/04-interfaces.md.
+ *
+ * Guard, spec, permissions and planning all happen before a single node runs,
+ * and each can reject the request on its own. Showing them as they resolve is
+ * what makes a 40-second wait legible instead of a blank terminal — and when
+ * one fails, it says which.
+ */
+export function StageList({ stages }: { stages: readonly Stage[] }): JSX.Element {
+  return (
+    <Box flexDirection="column">
+      {stages.map((s) => {
+        const state: StateKey =
+          s.state === "done"
+            ? "done"
+            : s.state === "running"
+              ? "running"
+              : s.state === "failed"
+                ? "failed"
+                : "queued";
+        return (
+          <Box key={s.id}>
+            <Text color={RAMP[state]}>{GLYPH[state]} </Text>
+            <Box width={11}>
+              <Text color={s.state === "pending" ? INK.dim : INK.text}>{s.label}</Text>
+            </Box>
+            <Text color={INK.dim} wrap="truncate-end">
+              {s.detail}
+            </Text>
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
+
 /**
  * The DAG panel. Columns collapse as the terminal narrows, but the node's
  * identity and state are the last things to go — they are what the panel is
@@ -183,7 +226,9 @@ export function StatusStrip({
   hint: string;
 }): JSX.Element {
   return (
-    <Box>
+    // Explicit width, or the flexGrow spacer has nothing to grow into and the
+    // hint collides with the elapsed counter — "…0stab focus".
+    <Box width="100%">
       <Text color={INK.dim}>{workspace}</Text>
       <Text color={INK.dim}> · </Text>
       <Text color={INK.dim}>{model}</Text>
