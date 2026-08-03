@@ -84,13 +84,30 @@ Use `--plain` if your terminal cannot handle full-screen rendering.
 
 ### Desktop app — the most complete surface
 
+**Installed:** run `Auto-Code-Agent-Setup-0.1.0.exe` and launch it from the Start menu. Nothing else
+is needed — the engine ships inside the app and starts with it. You still need a model server
+(Ollama, LM Studio or llama.cpp) for it to have anything to talk to.
+
+There is also a portable `.exe` that runs without installing.
+
+**From source:**
+
 ```bash
-pnpm daemon                                    # terminal 1: the engine
-cd packages/desktop && pnpm build && pnpm dev  # terminal 2: the app
+cd packages/desktop && pnpm build && pnpm dev
 ```
 
-The daemon must be running first. The app adopts it if it is already up, and outlives the window —
-closing the app does not kill a run.
+Either way the app starts the engine itself, or adopts one already running — so a run you started
+with `pnpm daemon` in a terminal is visible in the app, and vice versa. The engine outlives the
+window: closing the app does not kill a run.
+
+To build the installers yourself:
+
+```bash
+pnpm --filter auto-code-agent dist
+```
+
+They land in `packages/desktop/release/`. The build is unsigned, so Windows SmartScreen will warn on
+first launch — "More info" then "Run anyway".
 
 ---
 

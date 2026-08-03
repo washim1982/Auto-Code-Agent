@@ -1,0 +1,41 @@
+appId: dev.autocodeagent.desktop
+productName: Auto-Code-Agent
+copyright: Auto-Code-Agent
+
+directories:
+  output: release
+  buildResources: assets
+
+# Everything the app needs is already bundled by esbuild, so no node_modules
+# are shipped: main, preload, renderer and the engine are four compiled files.
+files:
+  - dist/**/*
+  - assets/icon.png
+  - "!**/*.map"
+
+# The daemon is spawned as a subprocess, so it has to be a real file on disk
+# rather than an entry inside the asar archive.
+asar: true
+asarUnpack:
+  - dist/daemon/**
+
+win:
+  icon: assets/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Auto-Code-Agent
+  artifactName: Auto-Code-Agent-Setup-${version}.${ext}
+  uninstallDisplayName: Auto-Code-Agent
+
+portable:
+  artifactName: Auto-Code-Agent-${version}-portable.${ext}

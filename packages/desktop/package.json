@@ -1,23 +1,29 @@
 {
-  "name": "@aca/desktop",
+  "name": "auto-code-agent",
   "version": "0.1.0",
   "private": true,
+  "description": "An autonomous coding agent for local and cloud models",
+  "author": "Auto-Code-Agent",
   "type": "module",
   "main": "dist/main/index.cjs",
   "scripts": {
     "build": "node build.mjs",
-    "dev": "node build.mjs && electron dist/main/index.cjs"
+    "dev": "node build.mjs && electron dist/main/index.cjs",
+    "icons": "electron make-icons.mjs",
+    "dist": "node build.mjs && electron-builder --win",
+    "dist:dir": "node build.mjs && electron-builder --win --dir"
   },
   "dependencies": {
     "@aca/daemon": "workspace:*",
     "@aca/protocol": "workspace:*"
   },
   "devDependencies": {
-    "electron": "^33.2.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3",
     "esbuild": "^0.24.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1"
+    "react-dom": "^18.3.1"
   }
 }

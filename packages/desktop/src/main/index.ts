@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 
 const DAEMON_INFO = join(homedir(), ".aca", "daemon.json");
@@ -11,7 +11,18 @@ const DAEMON_INFO = join(homedir(), ".aca", "daemon.json");
 // `electron dist/main/index.cjs`, which silently produces
 // `dist/main/dist/renderer/index.html`.
 const DIST = join(__dirname, "..");
-const REPO_ROOT = join(DIST, "..", "..", "..");
+
+/**
+ * The bundled engine.
+ *
+ * Kept outside the asar archive so it is a real file on disk: the daemon is
+ * spawned as a subprocess, and a path inside an archive is not something an
+ * arbitrary child process can be pointed at.
+ */
+const DAEMON_ENTRY = join(DIST, "daemon", "index.mjs").replace(
+  `app.asar${sep}`,
+  `app.asar.unpacked${sep}`,
+);
 
 let window: BrowserWindow | null = null;
 let daemon: ChildProcess | null = null;
@@ -42,11 +53,29 @@ async function ensureDaemon(): Promise<{ port: number; token: string } | null> {
     }
   }
 
-  daemon = spawn(
-    process.execPath,
-    ["--import", "tsx", join(REPO_ROOT, "packages", "daemon", "src", "bin.ts")],
-    { cwd: REPO_ROOT, stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
-  );
+  // Electron's own binary, told to behave as Node. That runtime carries the
+  // Node 22+ builtins the engine needs — `node:sqlite` above all — so an
+  // installed copy needs nothing else on the machine. Dev takes the same path
+  // as a shipped build rather than a `tsx` shortcut that only works in a repo.
+  daemon = spawn(process.execPath, [DAEMON_ENTRY], {
+    cwd: app.getPath("home"),
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
+
+  let stderr = "";
+  daemon.stderr?.on("data", (chunk: Buffer) => {
+    stderr = (stderr + chunk.toString()).slice(-4000);
+  });
+  daemon.on("exit", (code) => {
+    if (code !== 0 && code !== null) {
+      dialog.showErrorBox(
+        "The engine could not start",
+        `The background engine exited with code ${code}.\n\n${stderr.trim()}`,
+      );
+    }
+  });
 
   // Wait for the info file to appear rather than parsing stdout: the file is
   // the contract every client uses, so waiting on it tests the real path.
@@ -75,6 +104,9 @@ function createWindow(): void {
     show: false,
     backgroundColor: "#131519",
     titleBarStyle: "hiddenInset",
+    // Packaged builds take the icon from the executable; this is what gives
+    // the dev window the same one instead of the default Electron mark.
+    icon: join(DIST, "..", "assets", "icon.png"),
     webPreferences: {
       // The renderer is a view. It cannot touch fs, child_process or the
       // network directly — everything goes through the preload bridge, which

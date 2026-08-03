@@ -137,6 +137,8 @@ the event log.
 | File tree showed every directory expanded, with a `▸` on each that did nothing | The caret was decorative; there was no collapse state anywhere | Real open/closed state, one-pass depth filtering, no caret on a directory the walk never entered |
 | Model replies rendered `##`, `**` and pipe-tables as literal text | `.msg` was `white-space: pre-wrap` over a raw string — nothing parsed Markdown | A small parser and renderer, built from a tree so model output can never become markup; `javascript:` and `data:` hrefs render inert |
 | Every tool result carried a crimson "fenced as untrusted" banner, read as an error | Routine fencing was styled with the palette's failure colour, so the one thing worth alarming about looked identical to the 99% that was not | Routine case is a slate `fenced` badge; crimson is now reserved for `forgeryNeutralised` — content that actually tried to close its own envelope |
+| A packaged app would never have started its engine | `ensureDaemon` spawned `process.execPath --import tsx <repo>/packages/daemon/src/bin.ts` — in a packaged build `process.execPath` is the app itself, there is no repo, and no `tsx`. The path only ever worked because a daemon was already running during development. | The daemon is bundled into the app and spawned with `ELECTRON_RUN_AS_NODE`; dev takes the same path as a shipped build, so it is exercised |
+| Electron 33 could not host the engine at all | Its Node is 20.18, and `node:sqlite` landed in 22.5 — so the runtime that ships with the app could not open the database | Electron 43 (Node 24.18), which is what makes an installed copy self-contained |
 
 ---
 
@@ -188,6 +190,17 @@ RPC methods and a composer. **~2 days.**
 
 **6. Exercise the Docker T2 sandbox.** Defined and reachable but never run. On Windows it is the only
 real isolation boundary, so "untested" is a meaningful gap. **~half a day.**
+
+### Packaging — done
+
+`pnpm --filter auto-code-agent dist` produces a Windows NSIS installer and a portable exe. The engine
+is bundled into the app and launched with Electron's own Node, so an installed copy needs nothing
+else on the machine — not Node, not the repo. Verified by deleting the handshake file, launching the
+packaged exe with no daemon running, and watching it start its own and report connected.
+
+Still open: the build is **unsigned**, so SmartScreen warns on first launch. Signing needs a
+certificate, which is a purchasing decision rather than a code one. macOS and Linux targets are
+configured nowhere yet; only `--win` has been exercised.
 
 ### Larger
 

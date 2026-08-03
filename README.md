@@ -13,6 +13,10 @@ pnpm aca doctor
 pnpm aca run "add a guard clause to divide" --local-only
 ```
 
+**Desktop app:** `pnpm --filter auto-code-agent dist` builds a Windows installer and a portable exe
+into `packages/desktop/release/`. The engine ships inside the app, so an installed copy needs
+nothing else — not even Node.
+
 ## Start here
 
 | | |

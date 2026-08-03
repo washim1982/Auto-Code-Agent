@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!--
+    The app mark: a gauge.
+
+    The design language calls the UI a thermal instrument panel, and the heat
+    ramp — slate for queued through ember for running — is the one visual idea
+    that runs through every view. A dial reading into the ember band says that
+    in a single shape, and it survives being drawn at 16px, which a graph of
+    nodes and edges does not.
+  -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#20242b"/>
+      <stop offset="1" stop-color="#14171b"/>
+    </linearGradient>
+    <linearGradient id="heat" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#d9b24c"/>
+      <stop offset="0.55" stop-color="#e07b45"/>
+      <stop offset="1" stop-color="#d1525f"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="16" y="16" width="480" height="480" rx="108" fill="url(#tile)"/>
+  <rect x="16" y="16" width="480" height="480" rx="108" fill="none" stroke="#333a44" stroke-width="6"/>
+
+  <!-- The dial's mass sits above its centre, so the group is nudged down to
+       land on the tile's optical centre rather than its geometric one. -->
+  <g transform="translate(0 10)">
+    <!-- Unlit track: the full range the dial can read. -->
+    <path d="M 143.4 337 A 130 130 0 1 1 368.6 337"
+          fill="none" stroke="#2a2f37" stroke-width="56" stroke-linecap="round"/>
+
+    <!-- Lit band, running from the cool end into the hot one. -->
+    <path d="M 143.4 337 A 130 130 0 0 1 332.4 166.8"
+          fill="none" stroke="url(#heat)" stroke-width="56" stroke-linecap="round"/>
+
+    <!-- Needle, reaching the band it is reading. -->
+    <path d="M 256 272 L 314.8 191.1" fill="none" stroke="#e4e2de"
+          stroke-width="22" stroke-linecap="round"/>
+    <circle cx="256" cy="272" r="30" fill="#14171b" stroke="#e4e2de" stroke-width="14"/>
+  </g>
+</svg>
