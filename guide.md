@@ -298,6 +298,10 @@ its own tool calls, so the model can see the results it already has. If you stil
 model, that model is ignoring the binding; the loop now stops after six rounds and forces an answer
 rather than hanging.
 
+**Where did the tool calls go?** They are folded into one row per turn — `9 actions · read_file ×5 ·
+glob ×2` — because a dozen chips per answer buries the answer. Click the row to expand it. A turn
+that hit the fence guard expands on its own.
+
 **A tool result is marked `fenced`.** Not a problem. Every tool result is wrapped in an
 untrusted-data envelope before the model sees it, and the model is told to treat the contents as
 data rather than instructions. It is on all of them.

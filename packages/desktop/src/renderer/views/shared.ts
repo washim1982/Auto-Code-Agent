@@ -1,3 +1,15 @@
+export interface ThreadEntry {
+  id: string;
+  role: "user" | "assistant" | "tool";
+  content: string;
+  model?: string;
+  thinking?: string;
+  untrusted?: boolean;
+  /** The result tried to close its own fence — an attack, not routine. */
+  forgery?: boolean;
+  toolName?: string;
+}
+
 export interface TreeEntry {
   path: string;
   name: string;

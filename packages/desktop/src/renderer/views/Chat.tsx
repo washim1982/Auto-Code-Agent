@@ -1,18 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Markdown } from "./Markdown.tsx";
-import type { ModelRow } from "./shared.ts";
+import { groupThread, summarise, type ActivityStep } from "./thread-groups.ts";
+import type { ModelRow, ThreadEntry } from "./shared.ts";
 
-export interface ThreadEntry {
-  id: string;
-  role: "user" | "assistant" | "tool";
-  content: string;
-  model?: string;
-  thinking?: string;
-  untrusted?: boolean;
-  /** The result tried to close its own fence — an attack, not routine. */
-  forgery?: boolean;
-  toolName?: string;
-}
+export type { ThreadEntry };
 
 export interface PlanProposal {
   runId: string;
@@ -108,9 +99,20 @@ export function Chat({
               </div>
             )}
 
-            {thread.map((t) => (
-              <Turn key={t.id} entry={t} showThinking={showThinking} />
-            ))}
+            {groupThread(thread).map((g, i, all) =>
+              g.kind === "message" ? (
+                <Turn key={g.entry.id} entry={g.entry} showThinking={showThinking} />
+              ) : (
+                <Activity
+                  key={g.id}
+                  steps={g.steps}
+                  thinking={g.thinking}
+                  showThinking={showThinking}
+                  // The trailing group is the one still being worked on.
+                  live={busy && i === all.length - 1}
+                />
+              ),
+            )}
 
             {streaming && (
               <Turn
@@ -196,6 +198,94 @@ export function Chat({
   );
 }
 
+/**
+ * A turn's tool work, collapsed.
+ *
+ * Answering a question about a repo takes a dozen calls, and shown flat they
+ * push the actual answer off the screen. The header says what was done so the
+ * summary is usually enough; the detail is one click away when it is not.
+ */
+function Activity({
+  steps,
+  thinking,
+  showThinking,
+  live,
+}: {
+  steps: ActivityStep[];
+  thinking: string;
+  showThinking: boolean;
+  live?: boolean;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const flagged = steps.some((s) => s.forgery);
+  // A breakout attempt must not be something you have to expand to find.
+  const expanded = open || flagged;
+
+  return (
+    <div className="turn">
+      <span className="av" style={{ background: "var(--s3)", color: "var(--ink-3)" }}>
+        ⚙
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          className={`actbar${expanded ? " open" : ""}`}
+          onClick={() => setOpen((v) => !v)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setOpen((v) => !v)}
+        >
+          <span className="cv">▸</span>
+          <b>
+            {steps.length} {steps.length === 1 ? "action" : "actions"}
+          </b>
+          <span className="dim">{summarise(steps)}</span>
+          {thinking && (
+            <span className="dim">· {Math.ceil(thinking.length / 4)} thinking tokens</span>
+          )}
+          {flagged && <span style={{ color: "var(--crimson)" }}>⚠ fence breakout</span>}
+          {live && <span style={{ color: "var(--ember)" }}>· working</span>}
+        </div>
+
+        {expanded && (
+          <div className="actbody">
+            {thinking && showThinking && <div className="think">{thinking}</div>}
+            {steps.map((s) => (
+              <div key={s.id}>
+                <span className="toolchip">
+                  <span style={{ color: "var(--moss)" }}>✓</span>
+                  <b>{s.toolName}</b>
+                  <span className="dim">{s.args.slice(0, 70)}</span>
+                  {s.result !== null && (
+                    <>
+                      <span className="dim">→</span>
+                      <span className="dim">{s.result.slice(0, 70)}</span>
+                      {/* Fencing happens to every tool result, so it is a quiet
+                          badge — a warning shown every time is one nobody reads. */}
+                      <span
+                        className="fence"
+                        title="Tool output is wrapped in an untrusted-data envelope before the model sees it. The model is instructed to treat it as data and never as instructions. This is routine, not a problem."
+                      >
+                        fenced
+                      </span>
+                    </>
+                  )}
+                </span>
+                {/* Not routine: the content tried to close the envelope from
+                    the inside, which only happens on purpose. */}
+                {s.forgery && (
+                  <div className="untrusted" style={{ marginTop: 7 }}>
+                    ⚠ this content tried to break out of its untrusted-data fence — neutralised
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Turn({
   entry,
   showThinking,
@@ -205,41 +295,6 @@ function Turn({
   showThinking: boolean;
   live?: boolean;
 }): JSX.Element {
-  if (entry.role === "tool") {
-    return (
-      <div className="turn">
-        <span className="av" style={{ background: "var(--s3)", color: "var(--ink-3)" }}>
-          ⚙
-        </span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <span className="toolchip">
-            <span style={{ color: "var(--moss)" }}>✓</span>
-            <b>{entry.toolName ?? "tool"}</b>
-            <span className="dim">{entry.content.slice(0, 70)}</span>
-            {/* Fencing happens to every tool result, so it is a quiet badge
-                rather than a banner — a warning shown every single time is one
-                nobody reads. */}
-            {entry.untrusted && (
-              <span
-                className="fence"
-                title="Tool output is wrapped in an untrusted-data envelope before the model sees it. The model is instructed to treat it as data and never as instructions. This is routine, not a problem."
-              >
-                fenced
-              </span>
-            )}
-          </span>
-          {/* This one is not routine: the content tried to close the envelope
-              from the inside, which only happens on purpose. */}
-          {entry.forgery && (
-            <div className="untrusted" style={{ marginTop: 7 }}>
-              ⚠ this content tried to break out of its untrusted-data fence — neutralised
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   const isUser = entry.role === "user";
   return (
     <div className={`turn ${isUser ? "user" : "model"}`}>

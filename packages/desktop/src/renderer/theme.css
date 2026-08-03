@@ -163,6 +163,14 @@ body {
 .think { border-left: 2px solid var(--slate); background: var(--slate-dim); padding: 7px 11px; margin: 9px 0; font-size: 12.5px; color: var(--ink-3); border-radius: 0 var(--r) var(--r) 0; }
 .toolchip { display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 10.5px; border: 1px solid var(--line-2); border-radius: 2px; padding: 3px 8px; margin: 7px 6px 0 0; color: var(--ink-2); background: var(--s2); }
 
+/* A turn's tool work, folded into one row until asked for. */
+.actbar { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-family: var(--mono); font-size: 10.5px; color: var(--ink-2); border: 1px solid var(--line); border-radius: var(--r); background: var(--s1); padding: 5px 9px; cursor: pointer; user-select: none; }
+.actbar:hover { border-color: var(--line-2); }
+.actbar .cv { display: inline-block; color: var(--ink-3); transition: transform 90ms ease; }
+.actbar.open .cv { transform: rotate(90deg); }
+.actbar .dim { color: var(--ink-3); }
+.actbody { margin: 2px 0 0 9px; padding-left: 11px; border-left: 1px solid var(--line); }
+
 /* Routine fencing: a badge, because it is true of every tool result. */
 .toolchip .fence { font-size: 9px; letter-spacing: .06em; text-transform: uppercase; color: var(--slate); border: 1px solid var(--slate); border-radius: 2px; padding: 0 4px; cursor: help; }
 /* Reserved for a real breakout attempt, so crimson still means something. */
