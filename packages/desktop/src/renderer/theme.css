@@ -301,7 +301,11 @@ table.dt td.name { color: var(--ink); }
 .dd .sep { height: 1px; background: var(--line); margin: 6px 0; }
 
 /* --------------------------------------------------------- plan card */
-.plancard { border: 1px solid var(--ember); border-radius: var(--r); background: var(--s2); margin-top: 11px; overflow: hidden; }
+/* `.thread` is a flex column, so `overflow: hidden` here releases the automatic
+   minimum size and makes this the one child that can shrink to nothing. In a
+   full thread it absorbed all the shrinkage and rendered as a bare orange line.
+   `flex: none` is what `.composer` already does for the same reason. */
+.plancard { flex: none; border: 1px solid var(--ember); border-radius: var(--r); background: var(--s2); margin-top: 11px; overflow: hidden; }
 .plancard .ph2 { display: flex; align-items: center; gap: 8px; padding: 8px 11px; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--ember); }
 .plancard .pn2 { display: flex; gap: 9px; padding: 3px 11px; font-family: var(--mono); font-size: 11px; color: var(--ink-2); }
 .plancard .pn2 .w { color: var(--ink-3); margin-left: auto; }
