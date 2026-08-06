@@ -19,7 +19,7 @@ import {
   UnsafeArgument,
   windowsSpawnArgs,
 } from "../src/sandbox/exec.ts";
-import { globToRegExp } from "../src/builtins.ts";
+import { BUILTIN_TOOLS, globToRegExp } from "../src/builtins.ts";
 import { resolvePermission, DEFAULT_MATRIX } from "../src/registry.ts";
 
 let root: string;
@@ -333,5 +333,40 @@ describe("windows batch shim handling", () => {
     });
     expect(res.code).toBe(0);
     expect(res.stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
+  });
+});
+
+describe("grep and glob path scoping", () => {
+  const grep = BUILTIN_TOOLS.find((t) => t.name === "grep")!;
+
+  it("searches a single file when path names one rather than a directory", async () => {
+    // `readdirSync` on a file throws ENOTDIR. Swallowing that read as "no
+    // matches" rather than "wrong shape", so a model narrowing a search to one
+    // file got silence and retried with different patterns instead of a hit.
+    writeFileSync(join(root, "notes.md"), "alpha\nbeta needle\ngamma\n");
+
+    const res = await grep.run(
+      grep.schema.parse({ pattern: "needle", path: "notes.md" }),
+      { root } as never,
+    );
+
+    expect(res.content).toContain("notes.md:2");
+  });
+
+  it("still recurses when path names a directory", async () => {
+    writeFileSync(join(root, "docs", "a.md"), "needle here\n");
+    const res = await grep.run(
+      grep.schema.parse({ pattern: "needle", path: "docs" }),
+      { root } as never,
+    );
+    expect(res.content).toContain("a.md:1");
+  });
+
+  it("returns nothing for a path that does not exist", async () => {
+    const res = await grep.run(
+      grep.schema.parse({ pattern: "needle", path: "nope/missing.md" }),
+      { root } as never,
+    );
+    expect(res.content).toBe("");
   });
 });

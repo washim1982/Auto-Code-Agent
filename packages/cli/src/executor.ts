@@ -4,10 +4,14 @@ import type { PlanNode, ChatMessage } from "@aca/protocol";
 import {
   CancellationToken,
   ContextAssembler,
+  EmptyResultStreak,
   EpochCache,
   EventLog,
+  exhaustedNotice,
+  lowStepsNotice,
   OutputGuard,
   runGates,
+  StepBudget,
   WorkspaceRegistry,
   WriteSetViolation,
   PersonaRegistry,
@@ -49,6 +53,11 @@ export interface ExecutorOptions {
    * burns the step budget, and is where small models get lost.
    */
   memory?: MemoryStore;
+  /**
+   * Model round-trips per node (`run.maxSteps`). A node with more declared
+   * writes than this grows past it — see `StepBudget`.
+   */
+  maxSteps?: number;
   /** Records the model each node ran on, so the reviewer can be forced to differ. */
   onRoute?: (nodeId: string, model: string) => void;
   verbose?: boolean;
@@ -199,10 +208,45 @@ ${r.content}`,
      * have it does.
      */
     const seenCalls = new Set<string>();
+    /**
+     * The above only catches an exact repeat. A model that rewords a failing
+     * search every time slips past it, so track the results as well as the
+     * calls (F7 follow-up).
+     */
+    const emptyStreak = new EmptyResultStreak();
 
-    for (let step = 0; step < 12; step++) {
+    const budget = new StepBudget({
+      ...(options.maxSteps === undefined ? {} : { maxSteps: options.maxSteps }),
+      declaredWrites: node.sets.write.length,
+    });
+    /**
+     * Why the loop ended, which the caller below cannot otherwise tell.
+     *
+     * Running out of steps and finishing the job both used to just exit the
+     * loop, so a node cut off mid-research was reported as having "modified
+     * nothing" — the model blamed for a budget it was never shown.
+     */
+    let exhausted = true;
+
+    for (let step = 0; step < budget.total; step++) {
       token.throwIfCancelled();
       options.meter.check();
+      budget.consume();
+
+      // Delivered while the model can still act on it. Pushed before the call
+      // for this step, so this round-trip is the one that sees it.
+      if (budget.shouldWarn()) {
+        messages.push({
+          role: "user",
+          content: lowStepsNotice(budget.remaining, node.sets.write),
+        });
+        options.events.append(
+          options.runId,
+          "node.steps_low",
+          { remaining: budget.remaining, total: budget.total },
+          node.id,
+        );
+      }
 
       const stream = provider.chat(
         {
@@ -237,7 +281,10 @@ ${r.content}`,
         }
       }
 
-      if (calls.length === 0) break;
+      if (calls.length === 0) {
+        exhausted = false;
+        break;
+      }
       // Carries its own calls so the tool results below can bind to them.
       messages.push({ role: "assistant", content: text, toolCalls: calls });
 
@@ -314,6 +361,33 @@ ${r.content}`,
           options.cache.bump(options.runId, toolWrites, node.id);
         }
 
+        /**
+         * Only pure tools. Empty output from a search means it found nothing;
+         * empty output from a shell command or a write usually means it worked,
+         * and telling the model its target is "absent from this workspace"
+         * after three quiet successes would be actively misleading.
+         *
+         * The tool itself still runs — it is cheap, and a genuinely different
+         * search may well succeed. What changes is what the model is handed
+         * when it comes back empty yet again.
+         */
+        if (tool.purity === "pure" && emptyStreak.record(call.name, raw)) {
+          const streak = emptyStreak.count(call.name);
+          options.events.append(
+            options.runId,
+            "tool.exhausted",
+            { tool: call.name, streak },
+            node.id,
+          );
+          messages.push({
+            role: "tool",
+            content: exhaustedNotice(call.name, streak),
+            toolCallId: call.id,
+            name: call.name,
+          });
+          continue;
+        }
+
         // F11: everything a tool returns is fenced before the model sees it.
         const guarded = await options.guard.guard(raw, call.name, options.runId, node.id);
         options.events.append(
@@ -347,17 +421,38 @@ ${r.content}`,
      * and let the retry carry the feedback than to report success.
      */
     if (node.sets.write.length > 0 && writes.size === 0) {
+      // Naming the budget when that is what ran out. The two failures need
+      // different responses — more steps versus a different model or contract —
+      // and one message for both sent the last diagnosis down the wrong path.
       throw new Error(
-        `node ${node.id} declared writes (${node.sets.write.join(", ")}) but modified nothing — ` +
-          `the contract "${node.contract || node.title}" is not satisfied`,
+        exhausted
+          ? `node ${node.id} ran out of steps (${budget.used}/${budget.total}) before writing ` +
+            `${node.sets.write.join(", ")} — the contract "${node.contract || node.title}" ` +
+            `is not satisfied`
+          : `node ${node.id} declared writes (${node.sets.write.join(", ")}) but modified nothing — ` +
+            `the contract "${node.contract || node.title}" is not satisfied`,
       );
     }
 
-    const gates = await runGates(gateRunners(options.root), {
-      cwd: options.root,
-      changedFiles: [...writes],
-      signal: token.signal,
-    });
+    /**
+     * A declared read-only node does not run the mutation gates.
+     *
+     * `typecheck` and `unit` shell out to project-wide npm scripts and ignore
+     * `changedFiles` entirely, so running them on an analysis node fails it for
+     * breakage that was already in the workspace before the run started. That
+     * is not a hypothetical: it parks every node downstream of the analysis
+     * step, which is the whole plan. Write-set enforcement above has already
+     * proved this node changed nothing, so there is nothing for these gates to
+     * have an opinion about.
+     */
+    const gates =
+      node.sets.write.length === 0
+        ? { results: [], passed: true }
+        : await runGates(gateRunners(options.root), {
+            cwd: options.root,
+            changedFiles: [...writes],
+            signal: token.signal,
+          });
 
     // Chunks that survived eviction are the ones that could have contributed;
     // the supervisor promotes them if the node passes.

@@ -36,6 +36,7 @@ nothing else — not even Node.
 | [05 — Implementation plan](docs/05-implementation-plan.md) | 12 milestones, 83 days, risks, testing |
 | [06 — UI design spec](docs/06-ui-design.md) | Tokens, dimensions, layout rules · mockup: [`design/ui-design.html`](design/ui-design.html) |
 | [07 — Implementation status](docs/07-implementation-status.md) | Milestone state, findings closed, deviations, known limits |
+| [08 — Reliable node execution](docs/08-reliable-execution.md) | Why nodes run out of steps mid-work, and the plan to make them finish |
 
 ## Shape in one paragraph
 

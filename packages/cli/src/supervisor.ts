@@ -86,6 +86,7 @@ export async function buildRunner(options: RunnerOptions): Promise<RunSupervisor
     personas: services.personas,
     localOnly,
     meter: supervisor.meter,
+    maxSteps: services.config.run.maxSteps,
     ...(options.verbose ? { verbose: true } : {}),
     onRoute: (nodeId, model) => {
       nodeModels.set(nodeId, model);

@@ -31,6 +31,8 @@ export {
 
 export { EpochCache, type CacheKeyInput } from "./cache/epoch.ts";
 export { Cancelled, CancellationToken } from "./run/cancellation.ts";
+export { EmptyResultStreak, exhaustedNotice } from "./run/tool-streak.ts";
+export { StepBudget, lowStepsNotice, type StepBudgetOptions } from "./run/step-budget.ts";
 export { OutputGuard, type GuardedOutput } from "./guard/output-guard.ts";
 export {
   ContextAssembler,

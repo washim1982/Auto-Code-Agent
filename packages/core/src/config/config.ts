@@ -36,6 +36,13 @@ export const AcaConfig = z.object({
       maxAttempts: z.number().default(2),
       maxReviewRounds: z.number().default(3),
       concurrency: z.number().default(0), // 0 = derive from provider slots
+      /**
+       * Model round-trips per node. Raised from a hardcoded 12, which a node
+       * could spend entirely on research and never reach its writes; a node
+       * with more declared writes than this grows past it rather than being
+       * truncated. Trades tokens for completion rate — watch the meter.
+       */
+      maxSteps: z.number().default(24),
     })
     .default({}),
   memory: z

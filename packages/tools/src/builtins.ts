@@ -259,6 +259,15 @@ function walk(dir: string, onFile: (abs: string) => void, depth = 0): void {
   try {
     entries = readdirSync(dir, { withFileTypes: true });
   } catch {
+    // Scoping a search to one file is the obvious thing to ask for, and
+    // `readdirSync` on a file throws ENOTDIR. Returning here made `grep` answer
+    // "no matches" instead of "wrong shape", so a model that narrowed to a
+    // single file just kept retrying with different patterns against silence.
+    try {
+      if (statSync(dir).isFile()) onFile(dir);
+    } catch {
+      // genuinely missing or unreadable
+    }
     return;
   }
   for (const e of entries) {
