@@ -43,6 +43,31 @@ export const AcaConfig = z.object({
        * truncated. Trades tokens for completion rate — watch the meter.
        */
       maxSteps: z.number().default(24),
+      /**
+       * Output tokens per round-trip, clamped by the routed model's own
+       * `maxOutputTokens`. Was hardcoded at 2000, which truncates a `write_file`
+       * call carrying a source file — the node then fails having written
+       * nothing.
+       */
+      maxOutputTokens: z.number().default(8192),
+      /**
+       * Read-only tool calls a node may make before writing becomes the only
+       * available action. A node that has read 30 files and written nothing is
+       * not gathering context, it is stalling.
+       */
+      maxReads: z.number().default(30),
+      /**
+       * Token ceiling for one node. Without it the run budget is first-come:
+       * one node consumed all 400k and its four siblings never started.
+       */
+      maxNodeTokens: z.number().default(120_000),
+      /**
+       * Split each node into a read-only gather phase and a write-only apply
+       * phase, handing a structured brief between them instead of the whole
+       * transcript. Off by default until measured against the single-phase
+       * loop on the same goal — see docs/09-loop-redesign.md §5.
+       */
+      twoPhase: z.boolean().default(false),
     })
     .default({}),
   memory: z
@@ -126,12 +151,49 @@ function envOverrides(env: NodeJS.ProcessEnv): Record<string, unknown> {
   return out;
 }
 
+/**
+ * Reads a config file, whatever the editor encoded it as.
+ *
+ * PowerShell's `>` writes UTF-16LE by default on Windows, so
+ * `echo '{...}' > .aca/config.json` produces a file `JSON.parse` cannot read.
+ * That is a normal thing for someone to type, and the old version caught the
+ * error and returned `{}` — the setting was silently ignored, the run used the
+ * defaults, and the person who wrote the file measured the wrong thing without
+ * ever being told. A config that is present and unreadable is a mistake worth
+ * reporting; only a config that is absent is uneventful.
+ */
 function readJson(path: string): Record<string, unknown> {
+  let text: string;
   try {
-    return JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
-  } catch {
+    text = decode(readFileSync(path));
+  } catch (err) {
+    process.stderr.write(`aca: cannot read ${path}: ${(err as Error).message}\n`);
     return {};
   }
+
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch (err) {
+    process.stderr.write(
+      `aca: ignoring ${path} — it is not valid JSON (${(err as Error).message})\n`,
+    );
+    return {};
+  }
+}
+
+/** Decodes by byte-order mark, defaulting to UTF-8. */
+function decode(buf: Buffer): string {
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) {
+    return buf.subarray(2).toString("utf16le");
+  }
+  if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) {
+    // UTF-16BE: Node has no decoder for it, so swap into LE order first.
+    return buf.subarray(2).swap16().toString("utf16le");
+  }
+  if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) {
+    return buf.subarray(3).toString("utf8");
+  }
+  return buf.toString("utf8");
 }
 
 function deepMerge(

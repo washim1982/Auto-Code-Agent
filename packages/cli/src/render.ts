@@ -70,7 +70,8 @@ function subLine(n: PlanNode, detail?: string): string | null {
   if (n.status === "blocked")
     return `   ${c.dim("└")} ${c.slate("🔒 write set held by a sibling")}`;
   if (n.sets.write.length > 0) {
-    return `   ${c.dim("└")} ${c.dim(`write ▸ ${n.sets.write.join(", ")}`)}`;
+    const label = n.writePolicy === "optional" ? "optional write" : "write";
+    return `   ${c.dim("└")} ${c.dim(`${label} ▸ ${n.sets.write.join(", ")}`)}`;
   }
   return null;
 }

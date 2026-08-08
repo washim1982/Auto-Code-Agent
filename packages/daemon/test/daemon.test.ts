@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Daemon } from "../src/server.ts";
@@ -46,6 +46,7 @@ describe("daemon transport", () => {
     const info = DaemonClient.readInfo(infoPath)!;
     expect(info.port).toBeGreaterThan(0);
     expect(info.token).toHaveLength(64);
+    expect(info.engineBuild).toBe("dev");
   });
 
   it("surfaces a handler error as an RPC error rather than dropping the call", async () => {
@@ -210,5 +211,23 @@ describe("approval broker", () => {
     });
     expect(out.granted).toBe(false);
     expect(out.reason).toMatch(/no response/);
+  });
+});
+
+describe("the daemon's executor assembly", () => {
+  it("passes every run limit the config defines", () => {
+    // cli/supervisor.ts warns: "every front-end needs the identical assembly…
+    // One copy, one chance to get it wrong." The daemon built a second copy and
+    // omitted all four run limits, so `run.maxNodeTokens` — which has no
+    // default — was never enforced in the desktop app at all.
+    const source = readFileSync(
+      new URL("../src/sessions.ts", import.meta.url),
+      "utf8",
+    );
+    const assembly = source.slice(source.indexOf("execute = makeExecutor({"));
+
+    for (const knob of ["maxSteps", "maxOutputTokens", "maxReads", "maxNodeTokens"]) {
+      expect(assembly).toContain(`${knob}: services.config.run.${knob}`);
+    }
   });
 });

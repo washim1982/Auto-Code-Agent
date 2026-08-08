@@ -33,6 +33,7 @@ const GOLDEN_DAG = {
       deps: [],
       reads: ["src/math.js"],
       writes: ["src/math.js"],
+      writePolicy: "required" as const,
       contract: "divide throws when b is zero",
     },
     {
@@ -42,6 +43,7 @@ const GOLDEN_DAG = {
       deps: ["guard"],
       reads: ["src/math.js"],
       writes: ["test/math.test.js"],
+      writePolicy: "required" as const,
       contract: "a failing-if-unmet test exists",
     },
   ],

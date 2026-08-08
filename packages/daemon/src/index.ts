@@ -1,4 +1,5 @@
-export { Daemon, DAEMON_INFO_PATH, type DaemonInfo, type DaemonOptions } from "./server.ts";
+export { Daemon, type DaemonOptions } from "./server.ts";
+export { DAEMON_INFO_PATH, type DaemonInfo } from "./info.ts";
 export { DaemonClient, type NotificationHandler } from "./client.ts";
 export { ApprovalBroker } from "./approvals.ts";
 export { registerMethods, WorkspacePool } from "./methods.ts";

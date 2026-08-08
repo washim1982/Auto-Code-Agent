@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts"
+  },
   "dependencies": {
     "@aca/protocol": "workspace:*",
     "@aca/core": "workspace:*",

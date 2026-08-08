@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { StepBudget, lowStepsNotice } from "../src/run/step-budget.ts";
+import { gateDetail } from "../src/gates/vector.ts";
 
 describe("step budget", () => {
   it("defaults to 24 steps rather than the old hardcoded 12", () => {
@@ -88,8 +89,69 @@ describe("low-steps notice", () => {
     expect(notice).toMatch(/DONE/);
   });
 
+  it("does not force an optional write when no change is needed", () => {
+    const notice = lowStepsNotice(3, ["package.json"], false);
+    expect(notice).toContain("If the contract's condition requires a change");
+    expect(notice).toContain("finish without modifying");
+    expect(notice).not.toContain("node will fail");
+  });
+
   it("agrees with itself about singular and plural", () => {
     expect(lowStepsNotice(1, [])).toContain("1 step left");
     expect(lowStepsNotice(2, [])).toContain("2 steps left");
+  });
+});
+
+describe("gate detail for a prompt", () => {
+  it("strips the ANSI codes vitest wraps everything in", () => {
+    const detail = gateDetail([
+      {
+        gate: "unit",
+        passed: false,
+        severity: "blocking",
+        autoRetryable: true,
+        detail: "\u001b[7m\u001b[1m\u001b[36m RUN \u001b[39m failing test",
+        durationMs: 1,
+      },
+    ]);
+    // eslint-disable-next-line no-control-regex
+    expect(detail).not.toMatch(/\u001b\[/);
+    expect(detail).toContain("failing test");
+  });
+
+  it("keeps the first lines, which are the ones that say what to fix", () => {
+    const lines = Array.from({ length: 40 }, (_, i) => `error ${i}`).join("\n");
+    const detail = gateDetail(
+      [
+        {
+          gate: "typecheck",
+          passed: false,
+          severity: "blocking",
+          autoRetryable: true,
+          detail: lines,
+          durationMs: 1,
+        },
+      ],
+      { maxLines: 8 },
+    );
+
+    expect(detail).toContain("error 0");
+    expect(detail).not.toContain("error 9");
+    expect(detail).toContain("and 32 more line(s)");
+  });
+
+  it("says nothing about gates that passed", () => {
+    expect(
+      gateDetail([
+        {
+          gate: "secrets",
+          passed: true,
+          severity: "blocking",
+          autoRetryable: false,
+          detail: "",
+          durationMs: 1,
+        },
+      ]),
+    ).toBe("");
   });
 });

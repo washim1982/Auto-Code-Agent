@@ -1,11 +1,11 @@
 import { randomBytes } from "node:crypto";
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { createServer, type Server } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
 import { log, type Logger } from "@aca/core";
 import { ApprovalBroker } from "./approvals.ts";
+import { DAEMON_INFO_PATH, type DaemonInfo } from "./info.ts";
 import {
   ERROR,
   fail,
@@ -16,20 +16,12 @@ import {
   type RpcNotification,
 } from "./rpc.ts";
 
-export interface DaemonInfo {
-  port: number;
-  token: string;
-  pid: number;
-  startedAt: number;
-}
-
-export const DAEMON_INFO_PATH = join(homedir(), ".aca", "daemon.json");
-
 export interface DaemonOptions {
   port?: number;
   host?: string;
   infoPath?: string;
   logger?: Logger;
+  engineBuild?: string;
 }
 
 /**
@@ -47,12 +39,15 @@ export class Daemon {
   private http: Server | null = null;
   private handlers = new Map<string, Handler>();
   private clients = new Map<string, WebSocket>();
+  /** Per-client teardown, run when the socket closes. */
+  private disposers = new Map<string, (() => void)[]>();
   readonly approvals = new ApprovalBroker();
   readonly token: string;
   private infoPath: string;
   private host: string;
   private requestedPort: number;
   private logger: Logger;
+  private engineBuild: string;
   private info: DaemonInfo | null = null;
 
   constructor(options: DaemonOptions = {}) {
@@ -61,6 +56,7 @@ export class Daemon {
     this.host = options.host ?? "127.0.0.1";
     this.requestedPort = options.port ?? 0; // 0 = let the OS choose
     this.logger = options.logger ?? log.child("daemon");
+    this.engineBuild = options.engineBuild ?? "dev";
   }
 
   method(name: string, handler: Handler): this {
@@ -93,7 +89,13 @@ export class Daemon {
 
     const address = this.http.address();
     const port = typeof address === "object" && address ? address.port : this.requestedPort;
-    this.info = { port, token: this.token, pid: process.pid, startedAt: Date.now() };
+    this.info = {
+      port,
+      token: this.token,
+      pid: process.pid,
+      startedAt: Date.now(),
+      engineBuild: this.engineBuild,
+    };
 
     mkdirSync(join(this.infoPath, ".."), { recursive: true });
     writeFileSync(this.infoPath, JSON.stringify(this.info, null, 2), { mode: 0o600 });
@@ -121,16 +123,22 @@ export class Daemon {
       void this.dispatch(clientId, socket, String(data), send);
     });
 
-    socket.on("close", () => {
+    const cleanup = (): void => {
       this.clients.delete(clientId);
       this.approvals.detach(clientId);
+      // Event subscriptions outlive the socket otherwise. A reconnecting client
+      // then gets every event once per past connection, which reads as the
+      // agent doing the same work several times over.
+      for (const drop of this.disposers.get(clientId) ?? []) drop();
+      this.disposers.delete(clientId);
+    };
+
+    socket.on("close", () => {
+      cleanup();
       this.logger.debug("client detached", { clientId, clients: this.clients.size });
     });
 
-    socket.on("error", () => {
-      this.clients.delete(clientId);
-      this.approvals.detach(clientId);
-    });
+    socket.on("error", cleanup);
   }
 
   private async dispatch(
@@ -157,7 +165,15 @@ export class Daemon {
     }
 
     try {
-      const result = await handler(parsed.params ?? {}, { clientId, send });
+      const result = await handler(parsed.params ?? {}, {
+        clientId,
+        send,
+        onClose: (drop) => {
+          const existing = this.disposers.get(clientId) ?? [];
+          existing.push(drop);
+          this.disposers.set(clientId, existing);
+        },
+      });
       // A notification (no id) expects no reply, per JSON-RPC.
       if (id !== null) socket.send(JSON.stringify(ok(id, result ?? null)));
     } catch (err) {

@@ -89,9 +89,16 @@ export async function collectText(stream: AsyncIterable<ChatChunk>): Promise<{
   thinking: string;
   toolCalls: { id: string; name: string; args: Record<string, unknown> }[];
   usage: { inputTokens: number; outputTokens: number; costUsd: number };
+  /**
+   * Why generation stopped. `"length"` means the reply was cut off at the token
+   * ceiling — which callers parsing JSON must distinguish from a model that
+   * simply produced something malformed, because the fixes are opposite.
+   */
+  stopReason: string;
 }> {
   let text = "";
   let thinking = "";
+  let stopReason = "";
   const toolCalls: { id: string; name: string; args: Record<string, unknown> }[] = [];
   let usage = { inputTokens: 0, outputTokens: 0, costUsd: 0 };
 
@@ -99,6 +106,7 @@ export async function collectText(stream: AsyncIterable<ChatChunk>): Promise<{
     if (chunk.type === "text") text += chunk.delta;
     else if (chunk.type === "thinking") thinking += chunk.delta;
     else if (chunk.type === "tool_call") toolCalls.push(chunk.call);
+    else if (chunk.type === "done") stopReason = chunk.stopReason;
     else if (chunk.type === "usage") {
       usage = {
         inputTokens: chunk.inputTokens,
@@ -108,5 +116,5 @@ export async function collectText(stream: AsyncIterable<ChatChunk>): Promise<{
     }
   }
 
-  return { text, thinking, toolCalls, usage };
+  return { text, thinking, toolCalls, usage, stopReason };
 }

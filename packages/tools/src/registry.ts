@@ -69,9 +69,10 @@ export class ToolRegistry {
 export type PermissionMatrix = Record<string, Record<string, Permission>>;
 
 export const DEFAULT_MATRIX: PermissionMatrix = {
-  planner: { read_file: "allow", list_dir: "allow", glob: "allow", grep: "allow" },
+  planner: { read_file: "allow", read_artifact: "allow", list_dir: "allow", glob: "allow", grep: "allow" },
   coder: {
     read_file: "allow",
+    read_artifact: "allow",
     list_dir: "allow",
     glob: "allow",
     grep: "allow",
@@ -83,16 +84,17 @@ export const DEFAULT_MATRIX: PermissionMatrix = {
   },
   tester: {
     read_file: "allow",
+    read_artifact: "allow",
     list_dir: "allow",
     glob: "allow",
     grep: "allow",
     write_file: "allow",
     run_command: "allow",
   },
-  reviewer: { read_file: "allow", list_dir: "allow", glob: "allow", grep: "allow" },
+  reviewer: { read_file: "allow", read_artifact: "allow", list_dir: "allow", glob: "allow", grep: "allow" },
   // The summariser reads untrusted tool output, so it gets nothing (F11).
   summarizer: {},
-  chat: { read_file: "allow", list_dir: "allow", glob: "allow", grep: "allow" },
+  chat: { read_file: "allow", read_artifact: "allow", list_dir: "allow", glob: "allow", grep: "allow" },
 };
 
 export function resolvePermission(
@@ -106,6 +108,8 @@ export function resolvePermission(
 /** Minimal Zod → JSON Schema for tool declarations. */
 export function zodToJsonSchema(schema: z.ZodTypeAny): Record<string, unknown> {
   const def = schema._def as { typeName?: string };
+  const described = (value: Record<string, unknown>): Record<string, unknown> =>
+    schema.description ? { ...value, description: schema.description } : value;
 
   if (schema instanceof z.ZodObject) {
     const shape = schema.shape as Record<string, z.ZodTypeAny>;
@@ -115,24 +119,27 @@ export function zodToJsonSchema(schema: z.ZodTypeAny): Record<string, unknown> {
       properties[key] = zodToJsonSchema(value);
       if (!value.isOptional()) required.push(key);
     }
-    return { type: "object", properties, required, additionalProperties: false };
+    return described({ type: "object", properties, required, additionalProperties: false });
   }
-  if (schema instanceof z.ZodString) return { type: "string" };
-  if (schema instanceof z.ZodNumber) return { type: "number" };
-  if (schema instanceof z.ZodBoolean) return { type: "boolean" };
+  if (schema instanceof z.ZodString) return described({ type: "string" });
+  if (schema instanceof z.ZodNumber) return described({ type: "number" });
+  if (schema instanceof z.ZodBoolean) return described({ type: "boolean" });
   if (schema instanceof z.ZodArray) {
-    return { type: "array", items: zodToJsonSchema(schema.element as z.ZodTypeAny) };
+    return described({
+      type: "array",
+      items: zodToJsonSchema(schema.element as z.ZodTypeAny),
+    });
   }
   if (schema instanceof z.ZodEnum) {
-    return { type: "string", enum: schema.options as string[] };
+    return described({ type: "string", enum: schema.options as string[] });
   }
   if (schema instanceof z.ZodOptional || schema instanceof z.ZodDefault) {
     return zodToJsonSchema(schema._def.innerType as z.ZodTypeAny);
   }
   if (schema instanceof z.ZodUnion) {
-    return {
+    return described({
       anyOf: (schema.options as z.ZodTypeAny[]).map((o) => zodToJsonSchema(o)),
-    };
+    });
   }
-  return { type: def.typeName === "ZodNull" ? "null" : "string" };
+  return described({ type: def.typeName === "ZodNull" ? "null" : "string" });
 }

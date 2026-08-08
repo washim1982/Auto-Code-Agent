@@ -96,6 +96,7 @@ export interface NodeRow {
   persona: string;
   deps: string[];
   sets: { read: string[]; write: string[] };
+  writePolicy?: "required" | "optional";
   contract: string;
   attempts: number;
   reviewRounds: number;
@@ -162,7 +163,9 @@ export function eventColor(type: string): string {
   if (/fail|rolled|violat|denied|exceeded/.test(type)) return "var(--crimson)";
   if (/guard/.test(type)) return "var(--crimson)";
   if (/done|passed|approved|completed|granted/.test(type)) return "var(--moss)";
-  if (/approval|parked|warning|contended|exhausted|steps_low/.test(type)) return "var(--wheat)";
+  if (/approval|parked|warning|contended|exhausted|steps_low|truncated/.test(type)) {
+    return "var(--wheat)";
+  }
   if (/start|routed|called|proposed/.test(type)) return "var(--ember)";
   return "var(--ink-2)";
 }

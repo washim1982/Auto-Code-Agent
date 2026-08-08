@@ -7,6 +7,7 @@ import { FileDetail, FileLegend, FileTree, type FileState } from "./views/Files.
 import { Models, type ProviderHealth } from "./views/Models.tsx";
 import { Settings, type AcaConfigShape, type PermissionMatrix } from "./views/Settings.tsx";
 import { Timeline } from "./views/Timeline.tsx";
+import { progressLines, runIsActive } from "./views/event-lines.ts";
 import { Launcher, type Workspace } from "./views/Launcher.tsx";
 import type {
   AcaEvent,
@@ -200,6 +201,26 @@ export function App(): JSX.Element {
   useEffect(() => {
     activeModelRef.current = activeModel;
   }, [activeModel]);
+
+  /**
+   * The run, narrated into the thread.
+   *
+   * These events were already arriving — `run.subscribe` has fed `events` since
+   * the timeline was built. They just never reached the surface the user is
+   * actually looking at while a run takes three minutes to plan.
+   *
+   * Scoped to the newest run rather than `runId`, which is only set once a plan
+   * has been proposed — the silence before that is exactly what needed fixing.
+   */
+  const latestRunId = useMemo(() => events.at(-1)?.runId ?? null, [events]);
+  const progress = useMemo(
+    () => progressLines(events, { runId: latestRunId, limit: 200 }),
+    [events, latestRunId],
+  );
+  const progressLive = useMemo(
+    () => runIsActive(events, latestRunId),
+    [events, latestRunId],
+  );
 
   // -------------------------------------------------------------- loading
 
@@ -560,6 +581,8 @@ export function App(): JSX.Element {
             contextLayers={contextLayers}
             contextWindow={activeWindow}
             busy={busy}
+            progress={progress}
+            progressLive={progressLive}
             onSend={(t) => void send(t)}
             onModelChange={setActiveModel}
             onApprovePlan={(id) => {

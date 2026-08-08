@@ -42,7 +42,7 @@ export function renderPlanCard(
   for (const node of plan.nodes) {
     const deps = node.deps.length ? c.dim(` ←${node.deps.join(",")}`) : "";
     const writes = node.sets.write.length
-      ? node.sets.write.join(", ")
+      ? `${node.writePolicy === "optional" ? "optional: " : ""}${node.sets.write.join(", ")}`
       : node.persona === "reviewer"
         ? "read-only"
         : "—";
@@ -77,7 +77,9 @@ export function renderPlanCard(
   out.push(c.ember("├" + "─".repeat(inner) + "┤"));
   out.push(
     line(
-      ` ${c.ember("[a]")} ${c.bold("approve & run")}   ${c.dim("[e]")} edit   ${c.crimson(
+      // No `[e] edit`: it was advertised here and implemented nowhere, so
+      // pressing it fell through to the reject branch and discarded the plan.
+      ` ${c.ember("[a]")} ${c.bold("approve & run")}   ${c.crimson(
         "[r]",
       )} reject   ${c.dim(`${meta.provider}/${meta.model}${meta.repairs ? ` · ${meta.repairs} repair` : ""}`)}`,
     ),

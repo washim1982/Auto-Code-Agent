@@ -37,6 +37,7 @@ nothing else — not even Node.
 | [06 — UI design spec](docs/06-ui-design.md) | Tokens, dimensions, layout rules · mockup: [`design/ui-design.html`](design/ui-design.html) |
 | [07 — Implementation status](docs/07-implementation-status.md) | Milestone state, findings closed, deviations, known limits |
 | [08 — Reliable node execution](docs/08-reliable-execution.md) | Why nodes run out of steps mid-work, and the plan to make them finish |
+| [09 — Loop redesign + MCP](docs/09-loop-redesign.md) | Gather/apply split, and consuming MCP servers as gather-phase tools |
 
 ## Shape in one paragraph
 

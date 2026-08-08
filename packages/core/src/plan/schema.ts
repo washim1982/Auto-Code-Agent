@@ -32,7 +32,12 @@ export const PlannedNode = z.object({
   writes: z
     .array(z.string())
     .describe(
-      "Workspace-relative paths this node WRITES. Enforced at execution: a write outside this list fails the node.",
+      "Workspace-relative paths this node MAY write. Enforced at execution: a write outside this list fails the node.",
+    ),
+  writePolicy: z
+    .enum(["required", "optional"])
+    .describe(
+      "Use 'required' when the node must produce a diff. Use 'optional' when inspection may correctly conclude no change is needed.",
     ),
   contract: z
     .string()

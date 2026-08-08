@@ -457,6 +457,23 @@ export class SessionManager {
       personas: services.personas,
       localOnly,
       meter: supervisor.meter,
+      /**
+       * The run limits, which this second copy of the assembly was quietly
+       * omitting.
+       *
+       * `cli/supervisor.ts` says it plainly: "every front-end needs the
+       * identical assembly… One copy, one chance to get it wrong." The daemon
+       * built its own anyway, so every knob under `run.*` reached the CLI and
+       * none reached the desktop app. Three of the four have defaults that
+       * happen to match the config, which is why nobody noticed — but
+       * `maxNodeTokens` has no default, so `if (options.maxNodeTokens && …)`
+       * was simply skipped and one node took 210k of a 400k run.
+       */
+      maxSteps: services.config.run.maxSteps,
+      maxOutputTokens: services.config.run.maxOutputTokens,
+      maxReads: services.config.run.maxReads,
+      maxNodeTokens: services.config.run.maxNodeTokens,
+      twoPhase: services.config.run.twoPhase,
       onRoute: (nodeId, model) => nodeModels.set(nodeId, model),
       requestApproval: async (summary, detail) =>
         (

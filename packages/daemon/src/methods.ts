@@ -198,8 +198,11 @@ export function registerMethods(daemon: Daemon): { pool: WorkspacePool } {
       ctx.send(notify("event", { event: e }));
     });
     // Sockets are per-client and short-lived relative to the daemon; dropping
-    // the listener on close is what stops these accumulating.
-    setTimeout(() => unsubscribe, 0);
+    // the listener on close is what stops these accumulating. This used to be
+    // `setTimeout(() => unsubscribe, 0)`, which builds a closure returning the
+    // disposer and never calls it — so every reconnect left a live listener and
+    // the next run was delivered once per past connection.
+    ctx.onClose(unsubscribe);
     return { subscribed: true, runId };
   });
 

@@ -20,7 +20,7 @@ import {
   windowsSpawnArgs,
 } from "../src/sandbox/exec.ts";
 import { BUILTIN_TOOLS, globToRegExp } from "../src/builtins.ts";
-import { resolvePermission, DEFAULT_MATRIX } from "../src/registry.ts";
+import { resolvePermission, DEFAULT_MATRIX, ToolRegistry } from "../src/registry.ts";
 
 let root: string;
 
@@ -144,6 +144,18 @@ describe("checkpoint and write-set enforcement (F4)", () => {
 // ------------------------------------------------------------------ F10 sandbox
 
 describe("sandbox exec (F10)", () => {
+  it("rejects a whole shell line with actionable argument guidance", async () => {
+    const tool = BUILTIN_TOOLS.find((candidate) => candidate.name === "run_command")!;
+    const out = await tool.run(
+      { command: "git diff HEAD -- package.json", args: [], timeoutMs: 1000 },
+      { root, runId: "r", nodeId: "n", checkpoint: null },
+    );
+
+    expect(out.isError).toBe(true);
+    expect(out.content).toContain('"command" must contain one executable');
+    expect(out.content).toContain('"args"');
+  });
+
   it("captures stdout and the exit code", async () => {
     const res = await execSandboxed(process.execPath, ["-e", "console.log('hello')"], {
       cwd: root,
@@ -283,6 +295,20 @@ describe("glob translation", () => {
 });
 
 describe("permission matrix", () => {
+  it("describes run_command as executable plus separate arguments", () => {
+    const registry = new ToolRegistry();
+    const tool = BUILTIN_TOOLS.find((candidate) => candidate.name === "run_command")!;
+    registry.register(tool);
+    const described = registry.describe()[0]!;
+    const schema = described.schema as {
+      properties: Record<string, { description?: string }>;
+    };
+
+    expect(described.description).toContain("one executable");
+    expect(schema.properties["command"]?.description).toContain("Never a full shell command");
+    expect(schema.properties["args"]?.description).toContain("separate strings");
+  });
+
   it("denies anything not explicitly granted", () => {
     expect(resolvePermission(DEFAULT_MATRIX, "reviewer", "write_file")).toBe("deny");
     expect(resolvePermission(DEFAULT_MATRIX, "planner", "run_command")).toBe("deny");
@@ -368,5 +394,80 @@ describe("grep and glob path scoping", () => {
       { root } as never,
     );
     expect(res.content).toBe("");
+  });
+});
+
+describe("reading back spilled artifacts", () => {
+  const readArtifact = BUILTIN_TOOLS.find((t) => t.name === "read_artifact")!;
+
+  const writeArtifact = (id: string, body: string): void => {
+    const dir = join(root, ".aca", "artifacts");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, `${id}.txt`), body, "utf8");
+  };
+
+  it("returns a slice of a spilled result instead of the whole thing", async () => {
+    // The guard has always written results over 2 KB to disk and handed the
+    // model an id; until now nothing could fetch the rest, so a model needing
+    // line 400 could only re-run the tool and spill again.
+    writeArtifact(
+      "d286a0982426",
+      Array.from({ length: 500 }, (_, i) => `line ${i + 1}`).join("\n"),
+    );
+
+    const res = await readArtifact.run(
+      readArtifact.schema.parse({ id: "d286a0982426", startLine: 100, endLine: 102 }),
+      { root } as never,
+    );
+
+    expect(res.content).toContain("line 100");
+    expect(res.content).toContain("line 102");
+    expect(res.content).not.toContain("line 103");
+    expect(res.content).toContain("of 500");
+  });
+
+  it("refuses an id that is not a content hash", async () => {
+    // Joining an arbitrary string onto a path is how a jail gets escaped.
+    for (const id of ["../../etc/passwd", "a/b", "..", "id with space"]) {
+      const res = await readArtifact.run({ id, startLine: 1, endLine: 10 }, { root } as never);
+      expect(res.isError).toBe(true);
+    }
+  });
+
+  it("reports a missing artifact rather than throwing", async () => {
+    const res = await readArtifact.run(
+      { id: "aaaaaaaaaaaa", startLine: 1, endLine: 10 },
+      { root } as never,
+    );
+    expect(res.isError).toBe(true);
+    expect(res.content).toContain("no artifact");
+  });
+
+  it("clamps a nonsense range instead of burning a round-trip on an error", async () => {
+    // A model passing startLine 0 got a zod error back and lost a whole step to
+    // an off-by-one it could not see — five of them in one run.
+    writeArtifact("bbbbbbbbbbbb", "one\ntwo\nthree");
+
+    const zero = await readArtifact.run(
+      readArtifact.schema.parse({ id: "bbbbbbbbbbbb", startLine: 0, endLine: 2 }),
+      { root } as never,
+    );
+    expect(zero.isError).toBeFalsy();
+    expect(zero.content).toContain("one");
+
+    const backwards = await readArtifact.run(
+      readArtifact.schema.parse({ id: "bbbbbbbbbbbb", startLine: 3, endLine: 1 }),
+      { root } as never,
+    );
+    expect(backwards.isError).toBeFalsy();
+    expect(backwards.content).toContain("three");
+  });
+
+  it("is offered to every persona that can read files", () => {
+    for (const persona of ["coder", "planner", "reviewer", "tester", "chat"]) {
+      expect(resolvePermission(DEFAULT_MATRIX, persona, "read_artifact")).toBe("allow");
+    }
+    // The summariser reads untrusted bytes and gets nothing (F11).
+    expect(resolvePermission(DEFAULT_MATRIX, "summarizer", "read_artifact")).not.toBe("allow");
   });
 });

@@ -127,3 +127,56 @@ describe("log redaction", () => {
     expect(lines[0]).toContain("real");
   });
 });
+
+describe("config files as editors actually write them", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "aca-cfg-"));
+    mkdirSync(join(dir, ".aca"), { recursive: true });
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  const write = (buf: Buffer): void => writeFileSync(join(dir, ".aca", "config.json"), buf);
+  const load = (): boolean => loadConfig({ workspaceRoot: dir }).config.run.twoPhase;
+  const json = '{ "run": { "twoPhase": true } }';
+
+  it("reads UTF-16LE, which is what PowerShell's > produces", () => {
+    // `echo '{...}' > .aca/config.json` on Windows writes UTF-16LE. The setting
+    // was silently dropped and the run measured the default instead.
+    write(Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(json, "utf16le")]));
+    expect(load()).toBe(true);
+  });
+
+  it("reads UTF-16BE", () => {
+    const le = Buffer.from(json, "utf16le");
+    write(Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from(le).swap16()]));
+    expect(load()).toBe(true);
+  });
+
+  it("reads UTF-8 with a BOM", () => {
+    write(Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(json, "utf8")]));
+    expect(load()).toBe(true);
+  });
+
+  it("reads plain UTF-8", () => {
+    write(Buffer.from(json, "utf8"));
+    expect(load()).toBe(true);
+  });
+
+  it("says so rather than silently using defaults when the JSON is broken", () => {
+    const errors: string[] = [];
+    const original = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((s: string) => {
+      errors.push(String(s));
+      return true;
+    }) as typeof process.stderr.write;
+
+    write(Buffer.from("{ not json", "utf8"));
+    const value = load();
+    process.stderr.write = original;
+
+    expect(value).toBe(false); // falls back to the default
+    expect(errors.join("")).toMatch(/not valid JSON/);
+    expect(errors.join("")).toMatch(/config\.json/);
+  });
+});

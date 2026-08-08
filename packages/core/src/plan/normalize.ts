@@ -28,6 +28,7 @@ export function normalizeDag(dag: PlannedDag): { dag: PlannedDag; notes: Normali
   const nodes = dag.nodes.map((node) => {
     const deps: string[] = [];
     const reads = [...node.reads];
+    let writePolicy = node.writePolicy;
 
     for (const dep of node.deps) {
       if (ids.has(dep)) {
@@ -46,10 +47,32 @@ export function normalizeDag(dag: PlannedDag): { dag: PlannedDag; notes: Normali
       deps.push(dep);
     }
 
-    return { ...node, deps, reads };
+    // The contract is authoritative when it explicitly permits no change.
+    // Small planners often express the condition clearly in prose but leave
+    // the structured policy at its default, creating an impossible node.
+    if (writePolicy === "required" && contractAllowsNoop(node.contract)) {
+      writePolicy = "optional";
+      notes.push({
+        nodeId: node.id,
+        message: "changed writePolicy to optional because the contract explicitly permits no change",
+      });
+    }
+
+    return { ...node, deps, reads, writePolicy };
   });
 
   return { dag: { ...dag, nodes }, notes };
+}
+
+/** Explicit conditional/no-change language, not a vague guess about intent. */
+export function contractAllowsNoop(contract: string): boolean {
+  const text = contract.toLowerCase().replace(/\s+/g, " ");
+  return (
+    /\bdo not (?:modify|change|write|update)\b.{0,80}\bif\b/.test(text) ||
+    /\b(?:make|perform) no changes?\b/.test(text) ||
+    /\bonly (?:modify|change|write|update|add)\b.{0,40}\bif\b/.test(text) ||
+    /\b(?:if|when) (?:needed|required|necessary)\b/.test(text)
+  );
 }
 
 /** Path-shaped: has a separator, an extension, or a glob marker. */

@@ -18,10 +18,24 @@ export interface Scorecard {
   results: { id: string; passed: number; of: number }[];
 }
 
+/**
+ * Deepest needle we are willing to pay for. Probing a full 262k window costs
+ * real minutes per model; a verified floor of 40k is enough for every routing
+ * decision the coder and reviewer personas actually make.
+ */
+const MAX_PROBE_TOKENS = 40_000;
+
 export interface ProbeOptions {
   /** Runs per probe. Odd numbers avoid ties on a coin-flip model. */
   trials?: number;
-  /** Needle depths to test, as a fraction of the advertised window. */
+  /**
+   * Needle depths to test, in tokens.
+   *
+   * Absolute rather than fractions of the advertised window. Fractions gave no
+   * gradation at all on a long-context fleet: 0.25 of 262k is 65k, so every
+   * depth clamped to the same ceiling and one failure at that ceiling was the
+   * entire measurement.
+   */
   contextProbes?: number[];
   signal?: AbortSignal;
 }
@@ -44,7 +58,7 @@ export class ProbeSuite {
 
   constructor(options: ProbeOptions = {}) {
     this.trials = options.trials ?? 3;
-    this.contextProbes = options.contextProbes ?? [0.25, 0.5, 0.75];
+    this.contextProbes = options.contextProbes ?? [4_000, 16_000, 32_000];
   }
 
   async run(
@@ -215,15 +229,37 @@ export class ProbeSuite {
     signal?: AbortSignal,
   ): Promise<{ realContext: number; speed: { tokPerSec: number; ttftMs: number } }> {
     const advertised = d.caps.contextWindow;
-    let deepest = Math.min(4096, advertised);
+    /**
+     * 0 means "not measured", which the router reads as "keep the advertised
+     * window" (`card.realContext || d.caps.contextWindow`).
+     *
+     * Starting at a 4096 floor made a failed probe indistinguishable from a
+     * model measured at 4096 — and a failure here is very often the harness,
+     * not the model: LM Studio serves whatever context a model was *loaded*
+     * with and the OpenAI API has no per-request override, so a deep needle is
+     * truncated by the server. Recording that as a measured 4k window then
+     * excluded every capable model from the coder's 16k requirement.
+     */
+    let deepest = 0;
     let tokPerSec = 0;
     let ttftMs = 0;
 
-    for (const fraction of this.contextProbes) {
+    let lastDepth = 0;
+    for (const depth of this.contextProbes) {
       // Leave room for the question and answer; ~3.6 chars/token is close
       // enough for filler text.
-      const targetTokens = Math.floor(advertised * fraction);
-      if (targetTokens > 40_000) break; // probing a 262k window costs real time
+      //
+      // Clamped, not abandoned. This used to `break` when a fraction exceeded
+      // the cap, and 0.25 of a 262k window is 65k — so every long-context model
+      // broke on the first iteration, never ran a single needle, and was
+      // recorded at the 4096 floor with 0 tok/s. Those numbers then became
+      // authoritative: `measured()` overrides the advertised window with them,
+      // and a 4096 window fails the coder's 16k requirement, so probing a fleet
+      // of 256k models left nothing able to route a coding node.
+      const targetTokens = Math.min(depth, MAX_PROBE_TOKENS, advertised - 2048);
+      // Past the model's own window, or a depth we already covered.
+      if (targetTokens <= lastDepth || targetTokens < 512) break;
+      lastDepth = targetTokens;
       const filler = "The quick brown fox jumps over the lazy dog. ".repeat(
         Math.max(1, Math.floor((targetTokens * 3.6) / 45)),
       );

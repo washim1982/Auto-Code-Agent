@@ -1,5 +1,5 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { join, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import { WriteSetViolation } from "@aca/core";
 import { resolveInWorkspace, toResourceId } from "./paths.ts";
@@ -116,6 +116,64 @@ const grepTool: ToolDef = {
   },
 };
 
+/**
+ * Reads back output the guard spilled to an artifact.
+ *
+ * The guard already writes every tool result over 2 KB to
+ * `.aca/artifacts/<id>.txt` and hands the model an id, a summary and the first
+ * 800 characters. Until now there was no way to fetch the rest, so the file was
+ * write-only: a model needing line 400 of a 30 KB result could only call
+ * `read_file` again, spill again, and see the same first 800 characters. That
+ * is the loop that made large files unworkable rather than merely large.
+ *
+ * With line ranges, big content lives on disk and the window pays only for the
+ * slice actually needed — which is the whole point of spilling it.
+ */
+const readArtifactTool: ToolDef = {
+  name: "read_artifact",
+  description:
+    "Read a slice of a spilled tool result by its artifact id (shown as '[artifact <id> ...]'). " +
+    "Use this instead of re-running a tool whose output was too large. " +
+    "Give startLine/endLine to page through it; the default is the first 200 lines.",
+  schema: z.object({
+    id: z.string().describe("The artifact id, for example 'd286a0982426'."),
+    // Coerced, not validated: a model passing 0 got a zod error and burned a
+    // whole round-trip on an off-by-one it could not see.
+    startLine: z.number().int().default(1),
+    endLine: z.number().int().default(200),
+  }),
+  purity: "pure",
+  tier: "t0",
+  async run(args, ctx) {
+    const { id, startLine, endLine } = args as {
+      id: string;
+      startLine: number;
+      endLine: number;
+    };
+    // The id is a content hash, so anything else is a model mistake — and
+    // joining an arbitrary string onto a path is how a jail gets escaped.
+    if (!/^[0-9a-f]{6,64}$/i.test(id)) {
+      return { content: `bad artifact id: ${id}`, isError: true };
+    }
+
+    const from = Math.max(1, startLine);
+    const to = Math.max(from, endLine);
+    const abs = join(resolve(ctx.root), ".aca", "artifacts", `${id}.txt`);
+    let text: string;
+    try {
+      text = readFileSync(abs, "utf8");
+    } catch {
+      return { content: `no artifact ${id}`, isError: true };
+    }
+
+    const lines = text.split("\n");
+    const slice = lines.slice(from - 1, to);
+    const header =
+      `[artifact ${id} · lines ${from}-${Math.min(to, lines.length)} of ${lines.length}]`;
+    return { content: `${header}\n${slice.join("\n")}` };
+  },
+};
+
 const writeFileTool: ToolDef = {
   name: "write_file",
   description: "Write a UTF-8 text file. Must be inside the node's declared write set.",
@@ -172,10 +230,24 @@ const editFileTool: ToolDef = {
 
 const runCommandTool: ToolDef = {
   name: "run_command",
-  description: "Run a command in the workspace sandbox (no network at T1).",
+  description:
+    "Run one executable directly in the workspace sandbox (no network at T1). " +
+    "Put only the executable in command and each argument in args; shell lines, pipes, and redirects are unsupported. " +
+    // Every one of these was a real failure mode in a single run: 15 wasted
+    // round-trips on `cat`, `/tmp`, and `node -e` one-liners, each of which also
+    // left its error in the context for every later step to pay for.
+    "There is no shell, so `cat`, `ls`, `echo`, `sed` and `grep` are NOT available — " +
+    "use the read_file, list_dir, write_file and grep tools instead. " +
+    "Do not shell out to read or write files, and do not use /tmp: only paths inside " +
+    "the workspace exist. Prefer the dedicated tools; use this for git, npm and node scripts only.",
   schema: z.object({
-    command: z.string(),
-    args: z.array(z.string()).default([]),
+    command: z
+      .string()
+      .describe("One executable only, such as git, npm, or node. Never a full shell command."),
+    args: z
+      .array(z.string())
+      .describe("Arguments as separate strings, for example ['diff', 'HEAD', '--', 'package.json'].")
+      .default([]),
     timeoutMs: z.number().default(120_000),
   }),
   purity: "mutating",
@@ -190,6 +262,19 @@ const runCommandTool: ToolDef = {
       args: string[];
       timeoutMs: number;
     };
+    const wholeShellLine =
+      argv.length === 0 &&
+      /\s/.test(command.trim()) &&
+      !existsSync(command) &&
+      !existsSync(join(ctx.root, command));
+    if (wholeShellLine) {
+      return {
+        content:
+          'invalid run_command input: "command" must contain one executable, not a shell line. ' +
+          'Retry with separate arguments, for example {"command":"git","args":["diff","HEAD","--","package.json"]}.',
+        isError: true,
+      };
+    }
     const res = await execSandboxed(command, argv, {
       cwd: ctx.root,
       tier: "t1",
@@ -238,6 +323,7 @@ const gitPushTool: ToolDef = {
 
 export const BUILTIN_TOOLS: ToolDef[] = [
   readFileTool,
+  readArtifactTool,
   listDirTool,
   globTool,
   grepTool,

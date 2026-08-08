@@ -214,9 +214,37 @@ async function main(argv: string[]): Promise<number> {
   }
 }
 
+/**
+ * Exits by draining, not by `process.exit`.
+ *
+ * On Windows, stdout and stderr are pipes when the CLI runs under pnpm, and a
+ * write to a pipe is asynchronous. Calling `process.exit()` while one is still
+ * in flight tears down a handle libuv is mid-close on, which aborts the process:
+ *
+ *   Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), src\win\async.c:94
+ *   ELIFECYCLE  Command failed with exit code 3221226505   (0xC0000409)
+ *
+ * The output had already been produced, so it looked cosmetic — but the exit
+ * code is an abort rather than the status the command chose, which is not
+ * something a script or a CI step can read.
+ *
+ * Setting `exitCode` lets the loop finish the writes and close its handles on
+ * its own. The watchdog is the price of that: if some command leaves a socket
+ * or a database open, draining never completes and the CLI would hang, which is
+ * worse than an ugly exit. It is `unref`'d, so it cannot itself keep the
+ * process alive — it only fires if something else already is.
+ */
+function finish(code: number): void {
+  process.exitCode = code;
+  const watchdog = setTimeout(() => {
+    process.exit(code);
+  }, 2000);
+  watchdog.unref();
+}
+
 main(process.argv.slice(2))
-  .then((code) => process.exit(code))
+  .then(finish)
   .catch((err: Error) => {
     process.stderr.write(c.crimson(`${err.message}\n`));
-    process.exit(1);
+    finish(1);
   });

@@ -60,6 +60,42 @@ export async function runGates(
   return { results, passed };
 }
 
+// eslint-disable-next-line no-control-regex
+const ANSI = /\[[0-9;]*m/g;
+
+/**
+ * A gate's output, trimmed to something worth putting in a prompt.
+ *
+ * Raw output is unusable as feedback: vitest emits screenfuls wrapped in ANSI
+ * colour codes, and tsc will happily list every error in the project. Both
+ * bury the first few lines, which are the ones that say what to fix — and the
+ * whole point of carrying detail into a retry is that the model can act on it.
+ */
+export function gateDetail(
+  results: readonly GateResult[],
+  options: { maxLines?: number; maxChars?: number } = {},
+): string {
+  const maxLines = options.maxLines ?? 8;
+  const maxChars = options.maxChars ?? 600;
+
+  return results
+    .filter((r) => !r.passed && r.detail.trim())
+    .map((r) => {
+      const lines = r.detail
+        .replace(ANSI, "")
+        .split("\n")
+        .map((l) => l.trimEnd())
+        .filter((l) => l.trim());
+
+      const kept = lines.slice(0, maxLines).join("\n");
+      const body = kept.length > maxChars ? `${kept.slice(0, maxChars - 1)}…` : kept;
+      const omitted = lines.length - Math.min(lines.length, maxLines);
+
+      return `${r.gate}:\n${body}${omitted > 0 ? `\n… and ${omitted} more line(s)` : ""}`;
+    })
+    .join("\n\n");
+}
+
 /** Failing gates that a retry could plausibly fix. */
 export function retryableFailures(v: GateVector): GateResult[] {
   return v.results.filter((r) => !r.passed && r.autoRetryable && r.severity === "blocking");

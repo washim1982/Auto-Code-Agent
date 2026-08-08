@@ -29,6 +29,7 @@ export const EventType = z.enum([
   "node.rolled_back",
   "node.dirtied",
   "node.steps_low",
+  "node.brief",
 
   "lock.acquired",
   "lock.released",
@@ -38,15 +39,18 @@ export const EventType = z.enum([
   "tool.result",
   "tool.cache_hit",
   "tool.exhausted",
+  "tools.withdrawn",
   "cache.invalidated",
   "epoch.bumped",
   "checkpoint.taken",
 
+  "context.compacted",
   "guard.fenced",
   "guard.blocked",
 
   "model.request",
   "model.response",
+  "model.truncated",
 
   "gate.passed",
   "gate.failed",

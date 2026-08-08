@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { WebSocket } from "ws";
-import { DAEMON_INFO_PATH, type DaemonInfo } from "./server.ts";
+import { DAEMON_INFO_PATH, type DaemonInfo } from "./info.ts";
 import type { RpcNotification, RpcResponse } from "./rpc.ts";
 
 export type NotificationHandler = (method: string, params: Record<string, unknown>) => void;

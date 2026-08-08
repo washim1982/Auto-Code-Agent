@@ -54,10 +54,29 @@ export async function generateStructured<T>(
   const jsonSchema = toJsonSchema(req.schema);
   const maxRepairs = req.maxRepairs ?? 2;
   const attempts: string[] = [];
+  /**
+   * From the model's own capability rather than a flat 2048.
+   *
+   * A plan DAG with read and write sets does not fit in 2048 tokens, and a JSON
+   * object cut off mid-string fails to parse — so the repair loop burned all
+   * three attempts on a limit no amount of rephrasing could get under.
+   */
+  const outputCeiling =
+    req.maxTokens ?? Math.max(2048, Math.min(descriptor.caps.maxOutputTokens || 4096, 8192));
 
   const messages: ChatMessage[] = [...req.messages];
   let usage = { inputTokens: 0, outputTokens: 0, costUsd: 0 };
   const strategy = strategyFor(descriptor);
+  /**
+   * Why the last attempt failed, kept for the thrown error.
+   *
+   * "could not produce valid output after 3 attempts" names the model and
+   * nothing else — not which field was wrong, not whether the JSON was simply
+   * cut off. The loop already computes all of it and used to drop it on the
+   * floor, leaving the surface error unactionable.
+   */
+  let lastProblem = "";
+  let truncated = false;
 
   for (let repair = 0; repair <= maxRepairs; repair++) {
     let raw: string;
@@ -74,13 +93,14 @@ export async function generateStructured<T>(
               ? messages
               : [...messages, { role: "system", content: schemaInstruction(jsonSchema) }],
           ...(strategy === "json_schema" ? { responseSchema: jsonSchema } : {}),
-          maxTokens: req.maxTokens ?? 2048,
+          maxTokens: outputCeiling,
           temperature: 0,
         },
         req.signal,
       );
       const out = await collectText(stream);
       raw = out.text;
+      truncated = out.stopReason === "length";
       usage = {
         inputTokens: usage.inputTokens + out.usage.inputTokens,
         outputTokens: usage.outputTokens + out.usage.outputTokens,
@@ -98,6 +118,9 @@ export async function generateStructured<T>(
       }
       // Tell the model exactly which field is wrong — vague feedback produces
       // a vague correction.
+      lastProblem = validated.error.issues
+        .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+        .join("; ");
       messages.push({ role: "assistant", content: raw.slice(0, 2000) });
       messages.push({
         role: "user",
@@ -110,15 +133,28 @@ export async function generateStructured<T>(
       continue;
     }
 
+    // Cut off mid-JSON is not the same failure as malformed JSON, and the
+    // corrections are opposite: one needs a shorter answer, the other a
+    // better-formed one. Telling a truncated model to "return only JSON" just
+    // gets the same overlong reply again.
+    lastProblem = truncated
+      ? `the reply hit the ${outputCeiling}-token output limit and the JSON was cut off`
+      : `not valid JSON (${parsed.error})`;
     messages.push({ role: "assistant", content: raw.slice(0, 2000) });
     messages.push({
       role: "user",
-      content: `That was not valid JSON (${parsed.error}). Return only a JSON object, no prose, no code fence.`,
+      content: truncated
+        ? `Your reply was cut off at the output limit before the JSON closed. ` +
+          `Return the same structure but much shorter — fewer nodes, shorter strings, ` +
+          `no commentary. It must be complete and parseable.`
+        : `That was not valid JSON (${parsed.error}). Return only a JSON object, no prose, no code fence.`,
     });
   }
 
   throw new StructuredOutputError(
-    `model ${descriptor.provider}/${descriptor.id} could not produce valid output after ${maxRepairs + 1} attempts`,
+    `model ${descriptor.provider}/${descriptor.id} could not produce valid output after ` +
+      `${maxRepairs + 1} attempts` +
+      (lastProblem ? ` — ${lastProblem}` : ""),
     attempts,
   );
 }

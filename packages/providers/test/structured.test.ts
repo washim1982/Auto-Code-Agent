@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { toJsonSchema } from "@aca/protocol";
+import { toJsonSchema, type ChatChunk, type ModelDescriptor } from "@aca/protocol";
 import { jsonSchemaToGbnf } from "../src/gbnf.ts";
-import { tryParse } from "../src/structured.ts";
+import { generateStructured, StructuredOutputError, tryParse } from "../src/structured.ts";
+import type { ModelProvider } from "../src/types.ts";
 
 describe("Zod to JSON Schema", () => {
   it("marks defaulted and optional fields as not required", () => {
@@ -128,5 +129,159 @@ describe("JSON extraction", () => {
   it("reports failure rather than throwing", () => {
     const out = tryParse("no json at all");
     expect(out.ok).toBe(false);
+  });
+});
+
+const shape = z.object({ name: z.string(), nodes: z.array(z.string()) });
+
+function descriptor(over: Partial<ModelDescriptor["caps"]> = {}): ModelDescriptor {
+  return {
+    provider: "lmstudio",
+    kind: "openai-compat",
+    id: "google/gemma-4-31b",
+    state: "resident",
+    sizeBytes: 0,
+    quantization: "",
+    caps: {
+      contextWindow: 32_768,
+      maxOutputTokens: 4096,
+      tools: "native",
+      structured: "json_mode",
+      vision: false,
+      thinking: false,
+      streaming: true,
+      concurrency: 1,
+      costPer1kIn: 0,
+      costPer1kOut: 0,
+      privacyTier: "local",
+      ...over,
+    },
+  };
+}
+
+/** Replies with the given turns in order, each with its own stop reason. */
+function replying(turns: { text: string; stopReason?: string }[]): ModelProvider & {
+  asked: number[];
+  prompts: string[];
+} {
+  let n = 0;
+  const asked: number[] = [];
+  const prompts: string[] = [];
+  return {
+    id: "lmstudio",
+    kind: "openai-compat",
+    privacyTier: "local",
+    baseUrl: "test://",
+    asked,
+    prompts,
+    async health() {
+      return { up: true, latencyMs: 0 };
+    },
+    async listModels() {
+      return [];
+    },
+    async *chat(req): AsyncIterable<ChatChunk> {
+      asked.push(req.maxTokens ?? 0);
+      for (const m of req.messages) prompts.push(m.content);
+      const turn = turns[n++] ?? turns.at(-1)!;
+      yield { type: "text", delta: turn.text };
+      yield { type: "usage", inputTokens: 10, outputTokens: 10, costUsd: 0 };
+      yield { type: "done", stopReason: turn.stopReason ?? "stop" };
+    },
+  };
+}
+
+describe("structured output failures", () => {
+  it("says which field was wrong, not just that it failed", async () => {
+    // "could not produce valid output after 3 attempts" names the model and
+    // nothing else — there is no next step a person can take from it.
+    const provider = replying([{ text: '{"name":"x"}' }]);
+
+    await expect(
+      generateStructured(descriptor(), provider, { schema: shape, messages: [] }),
+    ).rejects.toThrow(/nodes/);
+  });
+
+  it("names truncation as truncation rather than as bad JSON", async () => {
+    const provider = replying([{ text: '{"name":"x","nodes":["a"', stopReason: "length" }]);
+
+    const err = (await generateStructured(descriptor(), provider, {
+      schema: shape,
+      messages: [],
+    }).catch((e: unknown) => e)) as StructuredOutputError;
+
+    expect(err.name).toBe("StructuredOutputError");
+    expect(err.message).toMatch(/output limit/);
+    expect(err.message).toMatch(/cut off/);
+  });
+
+  it("asks a truncated model to be shorter, not to 'return only JSON'", async () => {
+    // Telling a model that ran out of room to return only JSON gets the same
+    // overlong reply again; it has to be told to produce less.
+    const provider = replying([{ text: '{"name":"x","nodes":[', stopReason: "length" }]);
+
+    await generateStructured(descriptor(), provider, { schema: shape, messages: [] }).catch(
+      () => undefined,
+    );
+
+    expect(provider.prompts.some((m) => /much shorter/i.test(m))).toBe(true);
+    expect(provider.prompts.some((m) => /no prose, no code fence/i.test(m))).toBe(false);
+  });
+
+  it("keeps the raw attempts for debugging", async () => {
+    const provider = replying([{ text: "not json at all" }]);
+
+    const err = (await generateStructured(descriptor(), provider, {
+      schema: shape,
+      messages: [],
+    }).catch((e: unknown) => e)) as StructuredOutputError;
+
+    expect(err.attempts).toHaveLength(3);
+    expect(err.attempts[0]).toContain("not json at all");
+  });
+
+  it("still recovers when the repair turn works", async () => {
+    const provider = replying([
+      { text: '{"name":"x"}' },
+      { text: '{"name":"x","nodes":["a"]}' },
+    ]);
+
+    const result = await generateStructured(descriptor(), provider, {
+      schema: shape,
+      messages: [],
+    });
+
+    expect(result.value).toEqual({ name: "x", nodes: ["a"] });
+    expect(result.repairs).toBe(1);
+  });
+});
+
+describe("the output ceiling for structured calls", () => {
+  it("asks for the model's real ceiling rather than a flat 2048", async () => {
+    const provider = replying([{ text: '{"name":"x","nodes":[]}' }]);
+    await generateStructured(descriptor({ maxOutputTokens: 8192 }), provider, {
+      schema: shape,
+      messages: [],
+    });
+    expect(provider.asked[0]).toBe(8192);
+  });
+
+  it("never asks for more than the model can produce", async () => {
+    const provider = replying([{ text: '{"name":"x","nodes":[]}' }]);
+    await generateStructured(descriptor({ maxOutputTokens: 3000 }), provider, {
+      schema: shape,
+      messages: [],
+    });
+    expect(provider.asked[0]).toBe(3000);
+  });
+
+  it("lets the caller pin it explicitly", async () => {
+    const provider = replying([{ text: '{"name":"x","nodes":[]}' }]);
+    await generateStructured(descriptor(), provider, {
+      schema: shape,
+      messages: [],
+      maxTokens: 3000,
+    });
+    expect(provider.asked[0]).toBe(3000);
   });
 });

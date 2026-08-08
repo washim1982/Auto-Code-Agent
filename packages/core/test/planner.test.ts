@@ -17,6 +17,7 @@ function n(over: Partial<PlannedNode> & { id: string }): PlannedNode {
     deps: [],
     reads: [],
     writes: [],
+    writePolicy: "required",
     contract: "",
     ...over,
   };
@@ -230,10 +231,27 @@ describe("toPlan projection", () => {
     expect(node.reviewRounds).toBe(0);
     expect(node.route).toBeNull();
     expect(node.status).toBe("pending");
+    expect(node.writePolicy).toBe("required");
   });
 });
 
 describe("deterministic plan repair", () => {
+  it("makes an explicitly conditional write optional", () => {
+    const { dag: fixed, notes } = normalizeDag(
+      dag([
+        n({
+          id: "update_deps",
+          writes: ["package.json"],
+          contract:
+            "If new packages are required, update package.json. Do not modify if no new packages are needed.",
+        }),
+      ]),
+    );
+
+    expect(fixed.nodes[0]!.writePolicy).toBe("optional");
+    expect(notes.some((note) => note.message.includes("optional"))).toBe(true);
+  });
+
   it("moves a path-shaped dep into reads instead of burning a repair round", () => {
     const { dag: fixed, notes } = normalizeDag(
       dag([n({ id: "modify-divide", deps: ["src/math.js"], writes: ["src/math.js"] })]),
@@ -264,5 +282,46 @@ describe("deterministic plan repair", () => {
       dag([n({ id: "a", deps: ["src/x.ts"], reads: ["src/x.ts"] })]),
     );
     expect(fixed.nodes[0]!.reads).toEqual(["src/x.ts"]);
+  });
+});
+
+describe("a persona that cannot write", () => {
+  const dag = (over: Record<string, unknown>): PlannedDag =>
+    PlannedDag.parse({
+      reasoning: "one analysis node",
+      nodes: [
+        {
+          id: "extract_gaps",
+          title: "Extract gaps",
+          persona: "planner",
+          deps: [],
+          reads: ["project_context.md"],
+          writes: [".studio/plan/missing_features.json"],
+          writePolicy: "required",
+          contract: "Write the gap list.",
+          ...over,
+        },
+      ],
+    });
+
+  it("rejects a read-only persona that declares a write set", () => {
+    // Planned as a `planner` node writing a JSON file: unwinnable from the
+    // moment it was proposed, and it failed twice blaming the model for
+    // "describing the change instead of calling write_file".
+    const result = validatePlan(dag({}), []);
+
+    expect(result.ok).toBe(false);
+    const problem = result.problems.find((p) => p.nodeId === "extract_gaps");
+    expect(problem?.severity).toBe("error");
+    expect(problem?.message).toMatch(/cannot write/);
+    expect(problem?.message).toMatch(/coder/);
+  });
+
+  it("accepts the same node as a coder", () => {
+    expect(validatePlan(dag({ persona: "coder" }), []).ok).toBe(true);
+  });
+
+  it("accepts a read-only persona with no write set", () => {
+    expect(validatePlan(dag({ writes: [] }), []).ok).toBe(true);
   });
 });

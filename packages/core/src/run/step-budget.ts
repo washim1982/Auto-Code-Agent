@@ -74,14 +74,23 @@ export class StepBudget {
 }
 
 /** What the model is told when the budget runs low. */
-export function lowStepsNotice(remaining: number, declared: readonly string[]): string {
+export function lowStepsNotice(
+  remaining: number,
+  declared: readonly string[],
+  writesRequired = true,
+): string {
   const paths = declared.join(", ");
   return (
     `You have ${remaining} step${remaining === 1 ? "" : "s"} left in this node. ` +
     `Stop gathering context now. ` +
-    (paths
-      ? `Write ${paths} using write_file with the full file contents, then say DONE. `
+    (paths && writesRequired
+      ? `Call write_file for ${paths} now, with the full file contents as the argument. ` +
+        `Writing the contents in your reply instead of in a tool call changes nothing ` +
+        `and the node will fail. `
+      : paths
+        ? `If the contract's condition requires a change, write ${paths} now. ` +
+          `Otherwise finish without modifying it and state why no change is needed. `
       : `Finish with what you have, then say DONE. `) +
-    `If you cannot, say what is missing — do not keep reading.`
+    `Do not keep reading.`
   );
 }

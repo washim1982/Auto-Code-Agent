@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Markdown } from "./Markdown.tsx";
 import { groupThread, summarise, type ActivityStep } from "./thread-groups.ts";
+import type { ProgressLine, ToolProgressDetail } from "./event-lines.ts";
 import type { ModelRow, ThreadEntry } from "./shared.ts";
 
 export type { ThreadEntry };
@@ -37,6 +38,8 @@ export function Chat({
   contextLayers,
   contextWindow,
   busy,
+  progress,
+  progressLive,
   onSend,
   onModelChange,
   onApprovePlan,
@@ -50,6 +53,8 @@ export function Chat({
   contextLayers: ContextLayer[];
   contextWindow: number;
   busy: boolean;
+  progress: ProgressLine[];
+  progressLive: boolean;
   onSend: (text: string) => void;
   onModelChange: (id: string) => void;
   onApprovePlan: (runId: string) => void;
@@ -127,6 +132,8 @@ export function Chat({
                 live
               />
             )}
+
+            {progress.length > 0 && <RunProgress lines={progress} live={progressLive} />}
 
             {plan && <PlanCard plan={plan} onApprove={onApprovePlan} onReject={onRejectPlan} />}
 
@@ -323,6 +330,143 @@ function Turn({
       </div>
     </div>
   );
+}
+
+/**
+ * What the agent is doing right now, one line per step.
+ *
+ * The panel is bounded, scrollable and independently collapsible so the user
+ * can inspect the backend without pushing the conversation out of view. Tool
+ * rows expand again to reveal commands, arguments, generated code and output.
+ */
+function RunProgress({ lines, live }: { lines: ProgressLine[]; live: boolean }): JSX.Element {
+  const [open, setOpen] = useState(true);
+
+  return (
+    <details
+      className="runprog"
+      open={open}
+      onToggle={(e) => {
+        if (e.target === e.currentTarget) setOpen(e.currentTarget.open);
+      }}
+    >
+      <summary className="rph">
+        <span className="cv">▸</span>
+        <b>Backend process</b>
+        <span className="dim">
+          {lines.length} {lines.length === 1 ? "step" : "steps"}
+        </span>
+        <span className={`rpstate${live ? " live" : ""}`}>{live ? "running" : "idle"}</span>
+      </summary>
+
+      <div className="rplist">
+        {lines.map((line, i) => {
+          const last = i === lines.length - 1;
+          return line.detail ? (
+            <ToolProgressRow key={line.id} line={line} live={live} />
+          ) : (
+            <div
+              key={line.id}
+              className={`rp ${line.tone}${last && live ? " live" : ""}`}
+            >
+              <span className="rpm">{last && live ? "▸" : "·"}</span>
+              <span>{line.text}</span>
+            </div>
+          );
+        })}
+      </div>
+    </details>
+  );
+}
+
+function ToolProgressRow({ line, live }: { line: ProgressLine; live: boolean }): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const detail = line.detail!;
+  const running = detail.status === "running" && live;
+
+  return (
+    <details
+      className={`rp tool ${line.tone}${running ? " live" : ""}`}
+      open={open}
+      onToggle={(e) => setOpen(e.currentTarget.open)}
+    >
+      <summary>
+        <span className="rpm">▸</span>
+        <span>{line.text}</span>
+        <span className={`rpstatus ${detail.status}`}>{running ? "running" : detail.status}</span>
+      </summary>
+      <ToolProgressBody detail={detail} />
+    </details>
+  );
+}
+
+function ToolProgressBody({ detail }: { detail: ToolProgressDetail }): JSX.Element {
+  const hasBody = detail.command || detail.input || detail.code || detail.output;
+
+  return (
+    <div className="rpdetail">
+      <div className="rpmeta">
+        <span>tool {detail.tool}</span>
+        {detail.durationMs > 0 && <span>{formatDuration(detail.durationMs)}</span>}
+        {detail.bytes > 0 && <span>{formatSize(detail.bytes)}</span>}
+        {detail.writes.length > 0 && <span>wrote {detail.writes.join(", ")}</span>}
+      </div>
+
+      {detail.command && <ProgressCode label="Command" value={detail.command} />}
+      {detail.input && detail.input !== "{}" && (
+        <ProgressCode
+          label="Arguments"
+          value={detail.input}
+          truncated={detail.inputTruncated}
+        />
+      )}
+      {detail.code && (
+        <ProgressCode
+          label={detail.codePath ? `Code · ${detail.codePath}` : "Code"}
+          value={detail.code}
+          truncated={detail.codeTruncated}
+        />
+      )}
+      {detail.output && (
+        <ProgressCode
+          label={detail.status === "failed" ? "Error output" : "Output"}
+          value={detail.output}
+          truncated={detail.outputTruncated}
+        />
+      )}
+      {!hasBody && <div className="dim">No arguments or output were recorded.</div>}
+    </div>
+  );
+}
+
+function ProgressCode({
+  label,
+  value,
+  truncated = false,
+}: {
+  label: string;
+  value: string;
+  truncated?: boolean;
+}): JSX.Element {
+  return (
+    <div className="rpblock">
+      <div className="rplabel">
+        {label}
+        {truncated && <span>preview truncated</span>}
+      </div>
+      <pre>
+        <code>{value}</code>
+      </pre>
+    </div>
+  );
+}
+
+function formatDuration(ms: number): string {
+  return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} s`;
+}
+
+function formatSize(bytes: number): string {
+  return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(bytes < 10_240 ? 1 : 0)} KB`;
 }
 
 /**

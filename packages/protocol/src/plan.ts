@@ -28,6 +28,8 @@ export const PlanNode = z.object({
   persona: z.string().default("coder"),
   deps: z.array(NodeId).default([]),
   sets: NodeSets,
+  /** Whether producing no diff can legitimately satisfy this node. */
+  writePolicy: z.enum(["required", "optional"]).default("required"),
   /** What this node promises to produce; the reviewer checks against it. */
   contract: z.string().default(""),
   acceptance: z.array(AcceptanceCriterion).default([]),
@@ -46,6 +48,14 @@ export const PlanNode = z.object({
   checkpointId: z.string().nullable().default(null),
   /** Set when the node was requeued because a dependency rolled back (F6). */
   dirtyReason: z.string().nullable().default(null),
+  /**
+   * Why the previous attempt failed, injected into the next attempt's context.
+   *
+   * Without it a retry is a blind repeat: same prompt, same context, same
+   * model, and usually the same outcome. The executor comment that promised
+   * "let the retry carry the feedback" had nothing to carry it in.
+   */
+  retryReason: z.string().nullable().default(null),
 });
 export type PlanNode = z.infer<typeof PlanNode>;
 

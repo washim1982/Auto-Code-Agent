@@ -14,6 +14,7 @@ import type { NodeMeta, Stage } from "./components.tsx";
 import { openWorkspace, type WorkspaceServices } from "../workspace-service.ts";
 import { makeGenerator } from "../generator.ts";
 import { buildRunner, randomUUID, reply } from "../supervisor.ts";
+import { banner, CLI_VERSION } from "./banner.ts";
 
 const SYSTEM = `You are a coding agent working inside a workspace.
 
@@ -189,6 +190,25 @@ export async function startTui(options: TuiOptions): Promise<number> {
       />
     );
   };
+
+  /**
+   * Written before Ink takes over rather than rendered inside it.
+   *
+   * `render()` appends to the terminal instead of clearing it, so the banner
+   * stays put above the live frame — and it costs no vertical space in a layout
+   * that is already competing for rows. Inside the tree it would be redrawn on
+   * every state change for no benefit.
+   */
+  const stats = services.memory.indexStats();
+  process.stdout.write(
+    banner({
+      version: `v${CLI_VERSION}`,
+      workspace: services.name,
+      model: chosen.id,
+      index: stats.chunks > 0 ? `${stats.chunks} chunks` : "not indexed",
+      ...(options.localOnly ? { privacy: "local-only" } : {}),
+    }) + "\n",
+  );
 
   const instance = render(<Root />);
   await instance.waitUntilExit();

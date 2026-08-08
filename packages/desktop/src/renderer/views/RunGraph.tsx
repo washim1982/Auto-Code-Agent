@@ -110,7 +110,9 @@ export function DagCanvas({
                 {n.dirtyReason
                   ? n.dirtyReason
                   : n.sets.write.length
-                    ? `write ▸ ${n.sets.write.join(", ")}`
+                    ? `${n.writePolicy === "optional" ? "optional write" : "write"} ▸ ${n.sets.write.join(
+                        ", ",
+                      )}`
                     : "read-only"}
               </div>
               <div className="meta">
@@ -219,6 +221,11 @@ export function NodeDrawer({
                 Contract
               </div>
               <div style={{ fontSize: 12.5 }}>{node.contract || "(none stated)"}</div>
+              {node.sets.write.length > 0 && (
+                <div className="dim" style={{ fontSize: 12, marginTop: 8 }}>
+                  Write policy: {node.writePolicy === "optional" ? "optional" : "required"}
+                </div>
+              )}
             </div>
 
             <p className="dim" style={{ fontSize: 12, marginTop: 14, lineHeight: 1.5 }}>

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { PlanNode } from "@aca/protocol";
 import { renderDag } from "../src/render.ts";
@@ -101,5 +102,23 @@ describe("DAG panel", () => {
       const lines = strip(renderDag(nodes, {}, width)).split("\n");
       for (const line of lines) expect(line.length).toBeLessThanOrEqual(width);
     }
+  });
+});
+
+describe("the approval gate advertises only what it implements", () => {
+  it("does not offer an edit key that no code handles", () => {
+    // `[e] edit` was on the card and implemented nowhere, so pressing it fell
+    // through to the reject branch and silently discarded the plan.
+    const card = readFileSync(new URL("../src/plan-card.ts", import.meta.url), "utf8");
+    const footer = card.slice(card.indexOf("approve & run"));
+    expect(footer).not.toContain("[e]");
+  });
+
+  it("never treats an unrecognised answer as a rejection", () => {
+    // Rejection is destructive and one-way; a typo must not trigger it.
+    const run = readFileSync(new URL("../src/run.ts", import.meta.url), "utf8");
+    const gate = run.slice(run.indexOf("approve & run?"), run.indexOf("plan rejected"));
+    expect(gate).toMatch(/is not a\/r/);
+    expect(gate).toMatch(/answer === "r"/);
   });
 });

@@ -49,5 +49,10 @@ export function notify(method: string, params: Record<string, unknown>): RpcNoti
 
 export type Handler = (
   params: Record<string, unknown>,
-  ctx: { clientId: string; send: (n: RpcNotification) => void },
+  ctx: {
+    clientId: string;
+    send: (n: RpcNotification) => void;
+    /** Registers teardown to run when this client's socket closes. */
+    onClose: (drop: () => void) => void;
+  },
 ) => Promise<unknown>;

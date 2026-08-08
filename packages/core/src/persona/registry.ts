@@ -22,6 +22,16 @@ export interface Persona {
    * constraint rather than a preference.
    */
   requiresIndependence?: boolean;
+  /**
+   * Whether this persona is permitted any mutating tool.
+   *
+   * A node whose persona cannot write but which declares a write set can never
+   * satisfy its contract. Worse, once the loop withdraws reading to force a
+   * write, a read-only persona is left with no tools at all and fails for a
+   * reason that looks like model stubbornness. Catching it at plan time turns
+   * an unwinnable node into a repair instruction.
+   */
+  canWrite?: boolean;
 }
 
 const PERSONAS: Record<string, Persona> = {
@@ -44,6 +54,7 @@ const PERSONAS: Record<string, Persona> = {
 
   coder: {
     name: "coder",
+    canWrite: true,
     system:
       "You implement exactly one sub-task. Read before writing. Stay inside your declared write set.",
     requirement: {
@@ -52,13 +63,28 @@ const PERSONAS: Record<string, Persona> = {
       needsVision: false,
       needsStructured: false,
       minContext: 16_384,
-      qualityTier: "standard",
+      /**
+       * `critical`, not `standard`.
+       *
+       * At `standard` the residency bonus (0.35) outweighs capability (0.3), so
+       * whichever model happens to be warm wins a node whose output has to
+       * compile. `critical` inverts that — capability 0.58, residency 0.05 —
+       * and the weights table already says why: "paying a 20 GB model load is
+       * the right trade when correctness is what you are buying."
+       *
+       * The planner and reviewer were already `critical` while the one persona
+       * that writes source was not. A weak plan is caught at the approval gate
+       * and a weak review rubber-stamps; a weak write costs a rollback, a retry
+       * and the node's whole token share, which is what kept happening.
+       */
+      qualityTier: "critical",
       privacy: "prefer-local",
     },
   },
 
   tester: {
     name: "tester",
+    canWrite: true,
     system:
       "You write tests that would fail if the contract were unmet. Prefer few sharp tests over many shallow ones.",
     requirement: {

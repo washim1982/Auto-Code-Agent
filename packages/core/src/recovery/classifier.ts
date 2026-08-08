@@ -65,12 +65,50 @@ export class CapabilityMismatch extends Error {
 export class GateFailure extends Error {
   readonly gates: string[];
   readonly autoRetryable: boolean;
+  /** Compiler and test output, trimmed — see `gateDetail`. */
+  readonly details: string;
 
-  constructor(gates: string[], autoRetryable: boolean) {
-    super(`gates failed: ${gates.join(", ")}`);
+  /**
+   * The message carries the detail, not just the gate names.
+   *
+   * "gates failed: typecheck, unit" tells a retrying model that it failed and
+   * nothing it can act on; `src/types.ts(369,18): error TS1005` tells it what to
+   * fix. The reason travels into the next attempt's context, so whatever is
+   * left out here is information the retry does not get.
+   */
+  constructor(gates: string[], autoRetryable: boolean, details = "") {
+    super(
+      details
+        ? `gates failed: ${gates.join(", ")}\n${details}`
+        : `gates failed: ${gates.join(", ")}`,
+    );
     this.name = "GateFailure";
     this.gates = gates;
     this.autoRetryable = autoRetryable;
+    this.details = details;
+  }
+}
+
+/**
+ * A node finished without writing the paths it declared.
+ *
+ * Like `GateFailure`, this needs its own class rather than a generic `Error`:
+ * its message matches none of the pattern lists, so classification fell through
+ * to `permanent` and rolled the node back on its first attempt — which is
+ * exactly what the throw site was trying to avoid. Small models narrate the
+ * change instead of making it, and the second attempt, told plainly what went
+ * wrong, is where they usually get it right.
+ */
+export class ContractUnmet extends Error {
+  readonly declared: readonly string[];
+  /** True when the tool loop hit its step budget rather than finishing. */
+  readonly exhausted: boolean;
+
+  constructor(message: string, declared: readonly string[], exhausted: boolean) {
+    super(message);
+    this.name = "ContractUnmet";
+    this.declared = declared;
+    this.exhausted = exhausted;
   }
 }
 
@@ -103,6 +141,12 @@ export function classify(input: ClassifyInput): Verdict {
     return error.autoRetryable
       ? { failure: "transient", action: "retry", reason: message }
       : { failure: "permanent", action: "rollback", reason: message };
+  }
+
+  // Retryable while attempts remain: the exhaustion check above already caps
+  // it, and attempt 2 carries the reason this one failed.
+  if (error instanceof ContractUnmet) {
+    return { failure: "transient", action: "retry", reason: message };
   }
 
   // A write outside the declared set is never retryable — the plan was wrong,

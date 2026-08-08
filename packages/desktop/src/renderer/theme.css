@@ -300,6 +300,55 @@ table.dt td.name { color: var(--ink); }
 .dd .di .r2 { margin-left: auto; font-size: 10px; color: var(--ink-3); }
 .dd .sep { height: 1px; background: var(--line); margin: 6px 0; }
 
+/* ------------------------------------------------------ run progress */
+/* flex: none for the same reason as .plancard — see below. */
+.runprog { flex: none; border: 1px solid var(--line); border-left: 2px solid var(--line-2);
+  border-radius: var(--r); background: var(--s1); margin: 4px 0 4px 2px; overflow: hidden; }
+.runprog summary { list-style: none; }
+.runprog summary::-webkit-details-marker { display: none; }
+.runprog .rph { display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+  cursor: pointer; font-family: var(--mono); font-size: 10.5px; color: var(--ink-2); }
+.runprog .rph:hover { background: var(--s2); }
+.runprog .rph .cv { color: var(--ink-3); transition: transform 90ms ease; }
+.runprog[open] > .rph .cv { transform: rotate(90deg); }
+.runprog .rph .dim { color: var(--ink-3); }
+.runprog .rpstate { margin-left: auto; font-size: 9px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ink-3); }
+.runprog .rpstate.live { color: var(--ember); }
+.runprog .rplist { display: flex; flex-direction: column; gap: 2px; max-height: 420px;
+  overflow: auto; padding: 6px 10px 9px; border-top: 1px solid var(--line); }
+.runprog .rp { display: flex; gap: 8px; font-family: var(--mono); font-size: 11px;
+  line-height: 1.5; color: var(--ink-3); min-width: 0; }
+.runprog .rp .rpm { width: 8px; flex: none; color: var(--ink-3); }
+.runprog .rp.good { color: var(--moss); }
+.runprog .rp.warn { color: var(--wheat); }
+.runprog .rp.bad { color: var(--crimson); }
+.runprog .rp.live { color: var(--ember); }
+.runprog .rp.live .rpm { animation: rppulse 1.2s ease-in-out infinite; }
+.runprog .rp.tool { display: block; }
+.runprog .rp.tool > summary { display: flex; align-items: center; gap: 8px; cursor: pointer;
+  min-width: 0; border-radius: 2px; }
+.runprog .rp.tool > summary:hover { background: var(--s2); }
+.runprog .rp.tool > summary .rpm { transition: transform 90ms ease; }
+.runprog .rp.tool[open] > summary .rpm { transform: rotate(90deg); }
+.runprog .rpstatus { margin-left: auto; flex: none; font-size: 9px; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.runprog .rpstatus.running { color: var(--ember); }
+.runprog .rpstatus.completed, .runprog .rpstatus.cached { color: var(--moss); }
+.runprog .rpstatus.failed { color: var(--crimson); }
+.runprog .rpdetail { margin: 4px 0 7px 16px; border-left: 1px solid var(--line-2);
+  padding: 7px 9px; color: var(--ink-2); background: var(--ground); }
+.runprog .rpmeta { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-bottom: 7px;
+  color: var(--ink-3); font-size: 9.5px; }
+.runprog .rpblock + .rpblock { margin-top: 8px; }
+.runprog .rplabel { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 3px;
+  color: var(--ink-3); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+.runprog .rplabel span { color: var(--wheat); }
+.runprog .rpblock pre { margin: 0; padding: 7px 8px; max-height: 280px; overflow: auto;
+  border: 1px solid var(--line); border-radius: 2px; background: var(--s1); color: var(--ink-2);
+  font: inherit; line-height: 1.45; white-space: pre; user-select: text; }
+@keyframes rppulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+
 /* --------------------------------------------------------- plan card */
 /* `.thread` is a flex column, so `overflow: hidden` here releases the automatic
    minimum size and makes this the one child that can shrink to nothing. In a

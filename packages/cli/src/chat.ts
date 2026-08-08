@@ -14,6 +14,7 @@ import { ModelRouter, discoverProviders } from "@aca/providers";
 import type { ChatMessage, ModelDescriptor } from "@aca/protocol";
 import { c } from "./theme.ts";
 import { renderModelTable, renderSessionHeader } from "./render.ts";
+import { banner, CHAT_COMMANDS, CLI_VERSION } from "./tui/banner.ts";
 
 const SYSTEM = `You are a coding agent working inside a specific workspace.
 
@@ -88,7 +89,22 @@ export async function runChat(options: ChatOptions): Promise<number> {
     .list()
     .filter((t) => resolvePermission(DEFAULT_MATRIX, "chat", t.name) === "allow");
 
-  if (!options.json) {
+  // The banner is the welcome screen for a session someone is going to sit in;
+  // `--once` is scripted and gets the denser header instead.
+  if (!options.json && !options.once) {
+    process.stdout.write(
+      banner({
+        version: `v${CLI_VERSION}`,
+        workspace: ws.name,
+        model: chosen.id,
+        index: ws.indexedChunks ? `${ws.indexedChunks} chunks` : "not indexed",
+        commands: CHAT_COMMANDS,
+        ...(options.localOnly ? { privacy: "local-only" } : {}),
+      }) + "\n",
+    );
+  }
+
+  if (!options.json && options.once) {
     process.stdout.write(
       renderSessionHeader({
         workspace: ws.name,

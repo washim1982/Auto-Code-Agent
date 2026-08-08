@@ -14,7 +14,7 @@ import { classify, GateFailure } from "../recovery/classifier.ts";
 import { ReviewLoop } from "../review/loop.ts";
 import { BudgetMeter, type BudgetLimits } from "../budget/meter.ts";
 import { Cancelled, CancellationToken } from "./cancellation.ts";
-import { escalatingFailures } from "../gates/vector.ts";
+import { escalatingFailures, gateDetail } from "../gates/vector.ts";
 import type { MemoryWriteback } from "../memory/writeback.ts";
 
 export interface NodeExecution {
@@ -119,27 +119,35 @@ export class RunSupervisor {
 
         const ready = nodes.filter((n) => this.isReady(n, byId));
         if (ready.length === 0) {
-          const stuck = nodes.filter(
+          const unfinished = nodes.filter(
             (n) => n.status !== "done" && n.status !== "failed" && n.status !== "rolled_back",
           );
-          if (stuck.length === 0) {
-            this.events.append(runId, "run.failed", { reason: "nodes failed permanently" });
-            return { status: "failed", nodes, reason: "one or more nodes failed permanently" };
-          }
           // Parked nodes retain their locks (F5), so a run can legitimately be
           // waiting on a human. That is a pause, not a deadlock.
-          const parked = stuck.filter((n) => n.status === "parked");
-          this.events.append(runId, "run.paused", {
-            reason: parked.length ? "awaiting human approval" : "no runnable nodes",
-            parked: parked.map((n) => n.id),
-          });
-          return {
-            status: "failed",
-            nodes,
-            reason: parked.length
-              ? `parked awaiting approval: ${parked.map((n) => n.id).join(", ")}`
-              : "no runnable nodes remain",
-          };
+          const parked = unfinished.filter((n) => n.status === "parked");
+          if (parked.length > 0) {
+            this.events.append(runId, "run.paused", {
+              reason: "awaiting human approval",
+              parked: parked.map((n) => n.id),
+            });
+            return {
+              status: "failed",
+              nodes,
+              reason: `parked awaiting approval: ${parked.map((n) => n.id).join(", ")}`,
+            };
+          }
+
+          // Pending descendants of a permanently failed node are not a paused
+          // run. They can never become ready, so emit a terminal failure that
+          // the daemon and desktop can represent honestly instead of IDLE.
+          const failed = nodes.filter(
+            (n) => n.status === "failed" || n.status === "rolled_back",
+          );
+          const reason = failed.length
+            ? `nodes failed permanently: ${failed.map((n) => n.id).join(", ")}`
+            : "no runnable nodes remain";
+          this.events.append(runId, "run.failed", { reason });
+          return { status: "failed", nodes, reason };
         }
 
         // Width is clamped by provider slots, not CPU count — a 5-wide DAG
@@ -225,6 +233,7 @@ export class RunSupervisor {
         throw new GateFailure(
           failed.map((r) => r.gate),
           failed.every((r) => r.autoRetryable),
+          gateDetail(failed),
         );
       }
 
@@ -338,6 +347,9 @@ export class RunSupervisor {
     switch (verdict.action) {
       case "retry":
         node.status = "ready";
+        // Carried into the next attempt's context. A retry that repeats the
+        // same prompt against the same model reliably repeats the same failure.
+        node.retryReason = verdict.reason;
         this.locks.release(runId, node.id);
         this.events.append(runId, "node.retried", { attempts: node.attempts }, node.id);
         return;

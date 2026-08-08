@@ -48,14 +48,28 @@ Do not invent requirements. If the request is small, the spec is small.`;
 const PLAN_SYSTEM = `You break a specification into a DAG of executable sub-tasks.
 
 Rules that the scheduler depends on — violating them breaks the run:
-- Every node declares "writes": exactly the paths it will modify. A write
+- Every node declares "writes": exactly the paths it may modify. A write
   outside this list fails the node at execution time.
+- Every node declares "writePolicy". Use "required" when it must produce a
+  diff. Use "optional" for conditional work where inspection may correctly
+  conclude no change is needed (for example, "update dependencies if needed").
+- Never combine writePolicy "required" with a contract saying "if needed",
+  "only if", or "do not modify if". That makes a correct no-op impossible.
 - Every node declares "reads": paths it depends on the content of. This is how
   a rollback knows which nodes to invalidate.
 - If two nodes write overlapping paths, one MUST depend on the other. Parallel
   writes to the same file are a bug, not parallelism.
 - deps must reference ids that exist in this plan. No cycles.
-- Prefer 3-6 nodes. One node per coherent unit of work, not per file.
+- Keep nodes SMALL. A node is executed by one model in one bounded context
+  window, so its whole job must fit there alongside the files it has to read.
+  Prefer 4-10 small nodes over 3 large ones.
+- A node should declare at most 3 write paths. If a unit of work touches more,
+  split it — one node that writes eight files cannot hold them all in context
+  and will run out before it finishes.
+- Only "coder" and "tester" may declare writes. An analysis node that must
+  produce a file is a "coder" node, not a "planner" one.
+- Split by file or by concern, not by phase. "Add the IPC handler" and "add the
+  UI that calls it" are two nodes; "implement everything" is not a node.
 - Put verification (tests, checks) in its own node that depends on the work.
 
 Paths are workspace-relative. Never absolute, never outside the workspace.`;
@@ -228,6 +242,7 @@ export function toPlan(goal: string, dag: PlannedDag, rejectionReasons: string[]
         read: dedupe(n.reads.map(normalizeResource)),
         write: dedupe(n.writes.map(normalizeResource)),
       },
+      writePolicy: n.writePolicy,
       contract: n.contract,
       status: "pending",
     }),

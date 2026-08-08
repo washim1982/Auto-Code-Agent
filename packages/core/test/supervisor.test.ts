@@ -117,6 +117,28 @@ describe("run supervisor — corrected flow", () => {
     expect(events.read("r1").filter((e) => e.type === "node.rolled_back")).toHaveLength(1);
   });
 
+  it("fails rather than pausing when a failed node blocks its descendants", async () => {
+    const { sup, events } = ctx(
+      {
+        executeNode: async () => {
+          throw new Error("unrecoverable analysis failure");
+        },
+      },
+      { maxAttempts: 1 },
+    );
+
+    const out = await sup.run(
+      "r1",
+      plan([node("analyze"), node("implement", { deps: ["analyze"] })]),
+    );
+    const types = events.read("r1").map((event) => event.type);
+
+    expect(out.status).toBe("failed");
+    expect(out.reason).toContain("analyze");
+    expect(types.at(-1)).toBe("run.failed");
+    expect(types).not.toContain("run.paused");
+  });
+
   it("escalates a secrets gate instead of retrying or rolling back (F12)", async () => {
     let approvalAsked = false;
     const { sup, events } = ctx({
@@ -276,5 +298,53 @@ describe("run supervisor — corrected flow", () => {
     sup.meter.add(500);
     const out = await sup.run("r1", plan([node("n1")]));
     expect(out.status).toBe("failed");
+  });
+});
+
+describe("what a retry is told", () => {
+  it("carries the failing gate's actual output into the next attempt", async () => {
+    // Without this a retry is told "gates failed: unit" — that it failed, and
+    // nothing it can act on. The compiler error is the whole point.
+    const gates: GateVector = {
+      passed: false,
+      results: [
+        {
+          gate: "typecheck",
+          passed: false,
+          severity: "blocking",
+          autoRetryable: true,
+          detail: "src/types.ts(369,18): error TS1005: '=>' expected",
+          durationMs: 1,
+        },
+      ],
+    };
+
+    const seen: (string | null)[] = [];
+    const { sup } = ctx({
+      executeNode: async (n) => {
+        seen.push(n.retryReason);
+        return { gates, writes: [] };
+      },
+    });
+
+    await sup.run("r1", plan([node("n1")]));
+
+    // First attempt has nothing to carry; the second must have the error.
+    expect(seen[0]).toBeNull();
+    expect(seen[1]).toContain("TS1005");
+    expect(seen[1]).toContain("src/types.ts(369,18)");
+  });
+
+  it("leaves the reason unset when a node has never failed", async () => {
+    const seen: (string | null)[] = [];
+    const { sup } = ctx({
+      executeNode: async (n) => {
+        seen.push(n.retryReason);
+        return { gates: okGates, writes: [] };
+      },
+    });
+
+    await sup.run("r1", plan([node("n1")]));
+    expect(seen).toEqual([null]);
   });
 });

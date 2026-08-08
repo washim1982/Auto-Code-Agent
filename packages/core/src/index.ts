@@ -15,6 +15,7 @@ export { cascadeInvalidate, type CascadeResult } from "./scheduler/cascade.ts";
 export {
   CapabilityMismatch,
   classify,
+  ContractUnmet,
   GateFailure,
   isRetryable,
   WriteSetViolation,
@@ -33,13 +34,32 @@ export { EpochCache, type CacheKeyInput } from "./cache/epoch.ts";
 export { Cancelled, CancellationToken } from "./run/cancellation.ts";
 export { EmptyResultStreak, exhaustedNotice } from "./run/tool-streak.ts";
 export { StepBudget, lowStepsNotice, type StepBudgetOptions } from "./run/step-budget.ts";
+export {
+  NodeBrief,
+  BRIEF_SYSTEM,
+  renderBrief,
+  isBlocked,
+} from "./run/brief.ts";
+export {
+  ReadBudget,
+  READ_ONLY_TOOLS,
+  mustWriteNow,
+  writeOnlyNotice,
+  type ReadBudgetOptions,
+} from "./run/read-budget.ts";
+export {
+  compactMessages,
+  messageTokens,
+  type CompactOptions,
+  type CompactResult,
+} from "./run/compaction.ts";
 export { OutputGuard, type GuardedOutput } from "./guard/output-guard.ts";
 export {
   ContextAssembler,
   type ContextLayer,
   type AssembledContext,
 } from "./context/assembler.ts";
-export { runGates, type GateRunner, type GateContext } from "./gates/vector.ts";
+export { runGates, gateDetail, type GateRunner, type GateContext } from "./gates/vector.ts";
 export { BudgetMeter, BudgetExceeded, type BudgetLimits } from "./budget/meter.ts";
 export { escalatingFailures, retryableFailures } from "./gates/vector.ts";
 export {

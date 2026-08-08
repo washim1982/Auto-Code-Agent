@@ -162,8 +162,34 @@ export async function runPlan(options: PlanRunOptions): Promise<number> {
   // not regenerate the same plan.
   if (!options.yes) {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
-    const answer = (await rl.question(c.ember("approve & run? [a/r] "))).trim().toLowerCase();
-    if (answer !== "a" && answer !== "y") {
+
+    /**
+     * Re-asks until the answer is one it understands.
+     *
+     * This used to treat everything that was not `a` or `y` as a rejection, so
+     * a typo threw away a plan that took minutes and a model call to produce —
+     * and the prompt read `[a/r]`, which invites typing exactly that. Rejection
+     * is destructive and one-way; it should take a deliberate keystroke, not be
+     * the default for anything unrecognised.
+     */
+    let approved = false;
+    for (;;) {
+      const answer = (await rl.question(c.ember("approve & run? [a]pprove / [r]eject ")))
+        .trim()
+        .toLowerCase();
+
+      if (answer === "a" || answer === "y" || answer === "approve") {
+        approved = true;
+        break;
+      }
+      if (answer === "r" || answer === "n" || answer === "reject") break;
+
+      process.stdout.write(
+        c.dim(`  "${answer}" is not a/r — nothing has been approved or rejected yet\n`),
+      );
+    }
+
+    if (!approved) {
       const reason = (await rl.question(c.dim("why? (fed into replanning) "))).trim();
       rl.close();
       events.append(runId, "plan.rejected", { reason });

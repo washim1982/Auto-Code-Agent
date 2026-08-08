@@ -1,5 +1,6 @@
 import type { PlannedDag } from "./schema.ts";
 import { normalizeResource, resourcesIntersect } from "../scheduler/resource.ts";
+import { PersonaRegistry } from "../persona/registry.ts";
 
 export interface PlanProblem {
   severity: "error" | "warning";
@@ -11,6 +12,17 @@ export interface ValidationResult {
   ok: boolean;
   problems: PlanProblem[];
 }
+
+/** Above this, a node is very unlikely to fit its work in one window. */
+const MAX_WRITES_PER_NODE = 3;
+
+/** Personas whose permission set includes a mutating tool — see PersonaRegistry. */
+const WRITE_PERSONAS = new Set(
+  new PersonaRegistry()
+    .list()
+    .filter((p) => p.canWrite)
+    .map((p) => p.name),
+);
 
 /**
  * Structural validation of a generated plan.
@@ -86,6 +98,42 @@ export function validatePlan(dag: PlannedDag, acceptance: readonly string[]): Va
         severity: "warning",
         nodeId: node.id,
         message: "writes nothing and depends on nothing — is it doing any work?",
+      });
+    }
+
+    /**
+     * A read-only persona cannot satisfy a write set. Ever.
+     *
+     * `extract_gaps` was planned as a `planner` node writing
+     * `.studio/plan/missing_features.json`. The planner persona is permitted
+     * read tools and nothing else, so the node was unwinnable from the moment
+     * it was proposed — and it failed twice reporting that the model "described
+     * the change instead of calling write_file", which blamed the model for a
+     * plan that never gave it the option. An error, not a warning: this feeds
+     * the repair loop, which reassigns the persona rather than bothering a
+     * human with it.
+     */
+    if (node.writes.length > 0 && !WRITE_PERSONAS.has(node.persona)) {
+      problems.push({
+        severity: "error",
+        nodeId: node.id,
+        message:
+          `persona "${node.persona}" cannot write, but this node declares ` +
+          `${node.writes.join(", ")}. Use "coder" or "tester" for work that ` +
+          `produces files, or drop the write set.`,
+      });
+    }
+
+    // A node is executed inside one bounded context window, so its write set is
+    // a proxy for whether the work fits at all. The node that exhausted a
+    // 400k-token budget without finishing declared eight paths.
+    if (node.writes.length > MAX_WRITES_PER_NODE) {
+      problems.push({
+        severity: "warning",
+        nodeId: node.id,
+        message:
+          `declares ${node.writes.length} write paths; a node this wide rarely fits in ` +
+          `one context window — split it into one node per file or concern`,
       });
     }
   }

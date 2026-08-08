@@ -1,8 +1,15 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, sep } from "node:path";
+import { DaemonClient } from "@aca/daemon/client";
+import type { DaemonInfo } from "@aca/daemon";
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { hasUnfinishedRuns, needsEngineReplacement } from "./daemon-lifecycle.ts";
+
+declare const __ACA_ENGINE_BUILD__: string;
+const ENGINE_BUILD =
+  typeof __ACA_ENGINE_BUILD__ === "string" ? __ACA_ENGINE_BUILD__ : "dev";
 
 const DAEMON_INFO = join(homedir(), ".aca", "daemon.json");
 
@@ -27,6 +34,53 @@ const DAEMON_ENTRY = join(DIST, "daemon", "index.mjs").replace(
 let window: BrowserWindow | null = null;
 let daemon: ChildProcess | null = null;
 
+async function delay(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function processIsAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Stops an obsolete daemon only when it owns no unfinished run. Completed run
+ * history is persisted in workspace databases and survives the replacement.
+ */
+async function replaceStaleDaemon(info: DaemonInfo): Promise<boolean> {
+  if (!needsEngineReplacement(info, ENGINE_BUILD)) return false;
+
+  const client = await DaemonClient.connect(DAEMON_INFO);
+  if (!client) return true;
+
+  try {
+    const runs = await client.call<{ status: string }[]>("run.active");
+    if (hasUnfinishedRuns(runs)) return false;
+  } catch {
+    // If an older engine cannot report its live state, preserving it is safer
+    // than terminating work that may still be in progress.
+    return false;
+  } finally {
+    client.close();
+  }
+
+  try {
+    process.kill(info.pid, "SIGTERM");
+  } catch {
+    return true;
+  }
+
+  for (let attempt = 0; attempt < 50; attempt++) {
+    if (!processIsAlive(info.pid)) return true;
+    await delay(100);
+  }
+  return false;
+}
+
 /**
  * Adopts a running daemon, or spawns one.
  *
@@ -39,19 +93,20 @@ let daemon: ChildProcess | null = null;
 async function ensureDaemon(): Promise<{ port: number; token: string } | null> {
   if (existsSync(DAEMON_INFO)) {
     try {
-      const info = JSON.parse(readFileSync(DAEMON_INFO, "utf8")) as {
-        port: number;
-        token: string;
-        pid: number;
-      };
+      const info = JSON.parse(readFileSync(DAEMON_INFO, "utf8")) as DaemonInfo;
       // A live pid is a good enough liveness check to avoid a spawn race; the
       // renderer's first RPC call is the real one.
-      process.kill(info.pid, 0);
-      return { port: info.port, token: info.token };
+      if (!processIsAlive(info.pid)) throw new Error("stale daemon pid");
+      const replaced = await replaceStaleDaemon(info);
+      if (!replaced) return { port: info.port, token: info.token };
     } catch {
       // stale info file — fall through and spawn
     }
   }
+
+  // The old process is gone (or its info was unusable). Do not let the wait
+  // loop below mistake its still-present file for the daemon being spawned.
+  rmSync(DAEMON_INFO, { force: true });
 
   // Electron's own binary, told to behave as Node. That runtime carries the
   // Node 22+ builtins the engine needs — `node:sqlite` above all — so an
@@ -80,7 +135,7 @@ async function ensureDaemon(): Promise<{ port: number; token: string } | null> {
   // Wait for the info file to appear rather than parsing stdout: the file is
   // the contract every client uses, so waiting on it tests the real path.
   for (let i = 0; i < 60; i++) {
-    await new Promise((r) => setTimeout(r, 200));
+    await delay(200);
     if (!existsSync(DAEMON_INFO)) continue;
     try {
       const info = JSON.parse(readFileSync(DAEMON_INFO, "utf8")) as {

@@ -2,9 +2,13 @@ import { build } from "esbuild";
 import { cpSync, mkdirSync } from "node:fs";
 
 const shared = { bundle: true, platform: "node", target: "node20", external: ["electron"], logLevel: "info" };
+// Main and daemon receive the same id. A reopened desktop can then distinguish
+// its bundled engine from a global daemon left alive by an older build.
+const engineBuild = `${Date.now().toString(36)}-${process.pid.toString(36)}`;
+const engineDefine = { __ACA_ENGINE_BUILD__: JSON.stringify(engineBuild) };
 
 // Main and preload are CommonJS: Electron's preload loader does not take ESM.
-await build({ ...shared, entryPoints: ["src/main/index.ts"], outfile: "dist/main/index.cjs", format: "cjs" });
+await build({ ...shared, define: engineDefine, entryPoints: ["src/main/index.ts"], outfile: "dist/main/index.cjs", format: "cjs" });
 await build({ ...shared, entryPoints: ["src/preload/index.ts"], outfile: "dist/preload/index.cjs", format: "cjs" });
 
 // The engine, bundled into the app.
@@ -17,6 +21,7 @@ await build({ ...shared, entryPoints: ["src/preload/index.ts"], outfile: "dist/p
 // it is spawned as its own process rather than loaded by Electron's CJS loader.
 await build({
   ...shared,
+  define: engineDefine,
   entryPoints: ["../daemon/src/bin.ts"],
   outfile: "dist/daemon/index.mjs",
   format: "esm",
